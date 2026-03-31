@@ -58,15 +58,22 @@ Progress: ██████░░░░ 7/10 major attacks detectable
 
 ## Quick Start
 
+**Check your project's security posture in 30 seconds:**
+
+```bash
+bash tools/quick-check.sh
+```
+
+This checks cooldown settings, install script protection, lockfile tracking, registry auth, provenance, Homebrew telemetry, and sensitive file protection. No installs needed.
+
+**Explore the knowledge base:**
+
 ```bash
 # Browse the exploit database
 ls exploits/
 
 # Read the deep map for npm
 cat map/tools/npm.yaml
-
-# Check what your dev tools should be connecting to
-cat map/tools/pip.yaml
 
 # Run attack simulations (safe, uses localhost only)
 cd testing && ./harness.sh

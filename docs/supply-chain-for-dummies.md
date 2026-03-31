@@ -64,15 +64,26 @@ An attacker acquires control of a domain that existing code references — eithe
 
 These are concrete steps you can take today. None require special tools or paid services.
 
-### 1. Enable npm's min-release-age
+### 1. Enforce a minimum package age (cooldown)
 
-npm v11.10+ lets you block packages that were published less than N days ago. This gives the community time to spot malicious releases before they reach your machine.
+Package managers now support delaying installation of newly published versions. This gives the community time to spot and report malicious releases before they reach your machine. Most supply chain attacks are detected within days.
 
-```bash
-npm config set min-release-age 7d
+**pnpm** (v10.16+) -- add to your `pnpm-workspace.yaml` or `.npmrc`:
 ```
+minimumReleaseAge=10080
+```
+This sets a 7-day cooldown (value is in minutes: 10080 = 7 days).
 
-This single setting would have blocked many account takeover attacks, where malicious versions were detected and removed within days of publication.
+**npm** (latest versions) -- add to your `.npmrc`:
+```
+minimum-release-age=10080
+```
+Note: this feature is relatively new in npm. Check `npm config list` to confirm your version supports it. If you get an error, update npm first: `npm install -g npm@latest`.
+
+**Yarn** (v4.10+) -- add to `.yarnrc.yml`:
+```yaml
+npmMinimalAgeGate: 10080
+```
 
 ### 2. Disable install scripts for untrusted packages
 
@@ -91,6 +102,40 @@ Your `package-lock.json` or `yarn.lock` records the exact versions and integrity
 - Version jumps in packages not mentioned in the PR
 - Changed integrity hashes without version changes
 
+You can automate this with a simple script. Save this as `check-lockfile.sh` and run it after `git pull` or in CI:
+
+```bash
+#!/bin/bash
+# Show what changed in your lockfile since the last commit
+LOCKFILE=""
+if [ -f "package-lock.json" ]; then LOCKFILE="package-lock.json"; fi
+if [ -f "yarn.lock" ]; then LOCKFILE="yarn.lock"; fi
+if [ -f "pnpm-lock.yaml" ]; then LOCKFILE="pnpm-lock.yaml"; fi
+
+if [ -z "$LOCKFILE" ]; then
+  echo "No lockfile found."
+  exit 0
+fi
+
+echo "=== Lockfile changes in $LOCKFILE ==="
+
+# Show new packages added
+echo ""
+echo "NEW PACKAGES ADDED:"
+git diff HEAD~1 -- "$LOCKFILE" | grep "^+" | grep -E '"resolved"|"integrity"' | head -20
+
+# Show removed packages
+echo ""
+echo "PACKAGES REMOVED:"
+git diff HEAD~1 -- "$LOCKFILE" | grep "^-" | grep -E '"resolved"|"integrity"' | head -20
+
+# Count total changes
+ADDED=$(git diff HEAD~1 -- "$LOCKFILE" | grep "^+" | wc -l)
+REMOVED=$(git diff HEAD~1 -- "$LOCKFILE" | grep "^-" | wc -l)
+echo ""
+echo "Summary: +$ADDED lines / -$REMOVED lines changed in $LOCKFILE"
+```
+
 ### 4. Enable 2FA on your npm/PyPI account
 
 If you publish packages, enable two-factor authentication on your registry account. This is the single most effective defense against account takeover — the most common supply chain attack vector.
@@ -108,7 +153,35 @@ npm audit signatures
 
 If a package has provenance, you can verify it was not tampered with between the source repository and the registry.
 
+### Bonus: Disable Homebrew telemetry
+
+Homebrew is the **only** major package manager that sends analytics data (to InfluxDB in AWS Frankfurt). Every other tool -- npm, pip, cargo, yarn, Go modules, RubyGems -- sends zero telemetry.
+
+```bash
+brew analytics off
+# Or add to your shell profile:
+export HOMEBREW_NO_ANALYTICS=1
+```
+
+## Run All Checks at Once
+
+We provide a script that checks all of the above automatically and gives you a report:
+
+```bash
+curl -sL https://raw.githubusercontent.com/Karmona/Fenceline/main/tools/quick-check.sh | bash
+```
+
+Or clone the repo and run it locally:
+
+```bash
+git clone https://github.com/Karmona/Fenceline.git
+cd Fenceline
+bash tools/quick-check.sh
+```
+
+The script checks: cooldown settings, install script protection, lockfile tracking, registry auth, package provenance, Homebrew telemetry, and sensitive file protection. It produces a pass/fail report with specific fix instructions.
+
 ## Where to Learn More
 
-- **[Exploit analyses](../exploits/)** — Detailed breakdowns of real supply chain attacks, how they worked, how they were detected, and what defenses existed
-- **[Security tool landscape](landscape.md)** — Comprehensive directory of every known supply chain security tool, what it catches, and what it misses
+- **[Exploit analyses](../exploits/)** -- Detailed breakdowns of real supply chain attacks, how they worked, how they were detected, and what defenses existed
+- **[Security tool landscape](landscape.md)** -- Comprehensive directory of every known supply chain security tool, what it catches, and what it misses
