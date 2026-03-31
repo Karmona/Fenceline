@@ -1,0 +1,28 @@
+name: Test Workflow
+on: push
+
+jobs:
+  sha-pinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29
+      - uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b
+
+  tag-pinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5.1.0
+
+  branch-pinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: some-org/dangerous-action@main
+      - uses: another-org/risky-action@master
+
+  special:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker://ghcr.io/some/image:latest
+      - uses: ./local-action
+      - run: echo "not a uses line"

@@ -23,6 +23,11 @@ def _cmd_init(args: argparse.Namespace) -> int:
     return run(args)
 
 
+def _cmd_audit_actions(args: argparse.Namespace) -> int:
+    from .actions.audit import run
+    return run(args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="fenceline",
@@ -83,6 +88,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--force", action="store_true", help="Overwrite existing config"
     )
     init_parser.set_defaults(func=_cmd_init)
+
+    # -- audit-actions --
+    audit_actions_parser = subparsers.add_parser(
+        "audit-actions",
+        help="Scan GitHub Actions workflows for supply chain risks (tag tampering, etc.)",
+    )
+    audit_actions_parser.add_argument(
+        "--path",
+        type=str,
+        default=None,
+        help="Path to project root (default: current directory)",
+    )
+    audit_actions_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show all findings including skipped"
+    )
+    audit_actions_parser.set_defaults(func=_cmd_audit_actions)
 
     return parser
 

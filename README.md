@@ -3,7 +3,7 @@
 [![CI](https://github.com/Karmona/Fenceline/actions/workflows/ci.yml/badge.svg)](https://github.com/Karmona/Fenceline/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
-[![v0.2.0](https://img.shields.io/badge/version-0.2.0-orange.svg)](CHANGELOG.md)
+[![v0.2.0](https://img.shields.io/badge/version-0.3.0-orange.svg)](CHANGELOG.md)
 
 **Create clarity in chaos.**
 
@@ -35,6 +35,7 @@ Detailed case studies of real supply chain attacks — what happened, how it wor
 
 - [Exploit Case Studies](exploits/) — 10 major attacks analyzed in detail
 - [Supply Chain for Developers](docs/supply-chain-for-dummies.md) — plain-English explainer
+- [Defense Playbook](docs/playbook.md) — practical security steps organized by role
 - [Why This Matters](docs/why-this-matters.md) — the real cost, with real numbers
 
 ### Map
@@ -51,6 +52,7 @@ Tools that use the map and other signals to detect anomalies.
 
 - `fenceline check` — scan lockfile diffs for risky dependency changes
 - `fenceline install` — monitor network connections during package installs
+- `fenceline audit-actions` — scan GitHub Actions for tag-tampering risks (SHA pinning)
 - `fenceline init` — install git hooks for automatic checking
 - [Testing](testing/) — safe simulations of attack patterns
 - [Quick posture check script](tools/quick-check.sh) — checks your project's security settings now
@@ -171,13 +173,14 @@ Build the educational foundation.
 
 | Deliverable | Status |
 |-------------|--------|
-| [Exploit case studies](exploits/) (10 real attacks) | Done |
-| [Deep Map](map/) (8 package managers, 4 CDNs) | Done |
+| [Exploit case studies](exploits/) (11 real attacks, 2018-2026) | Done |
+| [Deep Map](map/) (8 package managers, 4 CDNs, IPv4+IPv6, TLS certs) | Done |
 | [Supply chain explainer](docs/supply-chain-for-dummies.md) for developers | Done |
-| [Tools landscape directory](docs/landscape.md) | Done |
+| [Tools landscape](docs/landscape.md) with [8 defense approaches](docs/landscape.md#approaches-to-supply-chain-defense) | Done |
+| [Defense playbook](docs/playbook.md) — practical steps by role | Done |
 | [Newsroom](docs/newsroom.md) (ongoing incidents + defenses) | Done |
 | [Quick posture check script](tools/quick-check.sh) | Done |
-| [5-minute security checklist](docs/supply-chain-for-dummies.md#5-minute-checklist-what-you-can-do-right-now) with tested commands | Done |
+| [5-minute security checklist](docs/supply-chain-for-dummies.md#5-minute-checklist-what-you-can-do-right-now) | Done |
 | [Attack simulation test harness](testing/) | Done |
 
 ### Phase 2: CLI Tools `v0.2 — done`
@@ -186,23 +189,23 @@ Detection tools that use the map and other signals.
 
 | Deliverable | Status |
 |-------------|--------|
-| [`fenceline check`](src/fenceline/check/) — lockfile diff scanner (package age, maintainer changes, capabilities, provenance) | Done |
-| [`fenceline install`](src/fenceline/install/) — install-time network monitor (compare connections against deep map) | Done |
+| [`fenceline check`](src/fenceline/check/) — lockfile diff scanner (npm + PyPI) | Done |
+| [`fenceline install`](src/fenceline/install/) — install-time network monitor (IPv4 + IPv6) | Done |
 | [`fenceline init`](src/fenceline/init/) — git hooks for auto-checking on lockfile changes | Done |
-| [35 automated tests](tests/) + [CI on every push](.github/workflows/ci.yml) | Done |
+| [`fenceline audit-actions`](src/fenceline/actions/) — GitHub Actions SHA pinning audit | Done |
+| [62 automated tests](tests/) + [CI on every push](.github/workflows/ci.yml) | Done |
+| [Weekly map freshness check](.github/workflows/map-freshness.yml) | Done |
 | Local install (`pip install -e .` from source) | Done |
-| Integrate with OpenSSF Scorecard API | Planned |
 
-### Phase 3: CI/CD Integration `v0.3 — in progress`
-
-Make it run automatically on every PR.
+### Phase 3: Harden + Grow `in progress`
 
 | Deliverable | Status |
 |-------------|--------|
 | [GitHub Action definition](action/action.yml) | Done |
-| [PR comment markdown formatter](src/fenceline/output/github.py) | Done |
-| Plugin system for community detection rules | Planned |
+| PyPI distribution (`pip install fenceline`) | Planned |
+| OpenSSF Scorecard API integration | Planned |
 | Behavioral layer for domain-reuse attacks (HTTP method/path analysis) | Planned |
+| Plugin system for community detection rules | Planned |
 
 ### Phase 4: Expand `future`
 

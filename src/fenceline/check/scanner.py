@@ -6,8 +6,22 @@ import json
 import sys
 from pathlib import Path
 
-from .lockfile import parse_lockfile, get_base_lockfile, diff_lockfiles
-from .registry import get_package_info, get_package_age, get_maintainer_change
+from .lockfile import (
+    parse_lockfile,
+    parse_pipfile_lock,
+    parse_requirements_txt_as_map,
+    detect_lockfile,
+    get_base_lockfile,
+    diff_lockfiles,
+)
+from .registry import (
+    get_package_info,
+    get_package_age,
+    get_maintainer_change,
+    get_pypi_package_info,
+    get_pypi_package_age,
+    get_pypi_maintainer_change,
+)
 from .provenance import check_provenance
 from .capabilities import check_capabilities
 from .scoring import compute_risk, RiskReport
@@ -24,23 +38,25 @@ def run(args) -> int:
     Returns 0 if all packages are LOW/MEDIUM, 1 if any HIGH/CRITICAL
     found, and 2 on error.
     """
-    lockfile_path = _find_lockfile(getattr(args, "lockfile", None))
+    explicit = getattr(args, "lockfile", None)
+    lockfile_type, lockfile_path = _find_lockfile_typed(explicit)
     if lockfile_path is None:
-        print("Error: no package-lock.json found.", file=sys.stderr)
+        print("Error: no supported lockfile found.", file=sys.stderr)
         return 2
 
     base_ref = getattr(args, "base_ref", None) or "HEAD"
     fmt = getattr(args, "format", "text") or "text"
+    is_pip = lockfile_type in ("pipfile", "requirements")
 
     # --- Parse head lockfile ---
     try:
-        head = parse_lockfile(lockfile_path)
+        head = _parse_head(lockfile_type, lockfile_path)
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"Error parsing lockfile: {exc}", file=sys.stderr)
         return 2
 
     # --- Get base lockfile from git ---
-    base = get_base_lockfile(lockfile_path, base_ref)
+    base = get_base_lockfile(lockfile_path, base_ref, lockfile_type)
     if base is None:
         # First commit or no git — treat everything as new.
         base = {}
@@ -59,22 +75,35 @@ def run(args) -> int:
         pkg_name = change.name
         version = change.new_version or change.old_version or ""
 
-        info = get_package_info(pkg_name)
-        if info is None:
-            # Unknown package — score with minimal data.
-            age = None
-            maint = {"changed": False, "added": [], "removed": []}
-            prov = {"has_provenance": False, "has_signatures": False, "attestation_count": 0}
-            caps: list[str] = []
+        if is_pip:
+            info = get_pypi_package_info(pkg_name)
+            if info is None:
+                age = None
+                maint = {"changed": False, "added": [], "removed": []}
+                prov = {"has_provenance": False, "has_signatures": False, "attestation_count": 0}
+                caps: list[str] = []
+            else:
+                age = get_pypi_package_age(info, version) if version else None
+                maint = get_pypi_maintainer_change(info, change.old_version, version)
+                # Provenance/capabilities not yet supported for PyPI.
+                prov = {"has_provenance": False, "has_signatures": False, "attestation_count": 0}
+                caps = []
         else:
-            age = get_package_age(info, version) if version else None
-            maint = get_maintainer_change(info, change.old_version, version)
-            prov = check_provenance(pkg_name, version) if version else {
-                "has_provenance": False,
-                "has_signatures": False,
-                "attestation_count": 0,
-            }
-            caps = check_capabilities(info, version)
+            info = get_package_info(pkg_name)
+            if info is None:
+                age = None
+                maint = {"changed": False, "added": [], "removed": []}
+                prov = {"has_provenance": False, "has_signatures": False, "attestation_count": 0}
+                caps = []
+            else:
+                age = get_package_age(info, version) if version else None
+                maint = get_maintainer_change(info, change.old_version, version)
+                prov = check_provenance(pkg_name, version) if version else {
+                    "has_provenance": False,
+                    "has_signatures": False,
+                    "attestation_count": 0,
+                }
+                caps = check_capabilities(info, version)
 
         report = compute_risk(change, age, maint, prov, caps)
         reports.append(report)
@@ -97,17 +126,45 @@ def run(args) -> int:
     return 0
 
 
-def _find_lockfile(explicit: str | None) -> Path | None:
-    """Locate the lockfile to analyse."""
+def _find_lockfile_typed(explicit: str | None) -> tuple[str, Path | None]:
+    """Locate the lockfile to analyse and return its type.
+
+    Returns ``(lockfile_type, path)`` where *lockfile_type* is one of
+    ``"npm"``, ``"pipfile"``, ``"requirements"``, ``"yarn"``, ``"pnpm"``.
+    If no lockfile is found, returns ``("", None)``.
+    """
     if explicit:
         p = Path(explicit)
-        return p if p.is_file() else None
+        if not p.is_file():
+            return ("", None)
+        # Infer type from filename.
+        name = p.name
+        if name == "package-lock.json":
+            return ("npm", p)
+        if name == "Pipfile.lock":
+            return ("pipfile", p)
+        if name == "requirements.txt":
+            return ("requirements", p)
+        if name == "yarn.lock":
+            return ("yarn", p)
+        if name == "pnpm-lock.yaml":
+            return ("pnpm", p)
+        # Fall back to npm for unknown filenames.
+        return ("npm", p)
 
-    candidate = Path.cwd() / "package-lock.json"
-    if candidate.is_file():
-        return candidate
+    result = detect_lockfile(Path.cwd())
+    if result is None:
+        return ("", None)
+    return result
 
-    return None
+
+def _parse_head(lockfile_type: str, lockfile_path: Path) -> dict:
+    """Parse the head lockfile based on its type."""
+    if lockfile_type == "pipfile":
+        return parse_pipfile_lock(lockfile_path)
+    if lockfile_type == "requirements":
+        return parse_requirements_txt_as_map(lockfile_path)
+    return parse_lockfile(lockfile_path)
 
 
 def _output_console(reports: list[RiskReport]) -> None:

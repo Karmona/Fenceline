@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-03-31
+
+### Added
+- `fenceline audit-actions` — scans GitHub Actions workflows for unpinned actions
+  - Classifies: SHA-pinned (pass), tag-pinned (warning), @main/@master (critical)
+  - Motivated by TeamPCP campaign that force-pushed Trivy/Checkmarx action tags
+- PyPI/pip support for `fenceline check`
+  - Parses Pipfile.lock and requirements.txt
+  - Queries PyPI registry API for package age and metadata
+  - Auto-detects lockfile type (npm, pip, yarn, pnpm)
+- Defense playbook (docs/playbook.md) — practical steps organized by role
+- Landscape rewrite: 8 defense approaches taxonomy with honest positioning
+- TeamPCP campaign case study (11th exploit — Trivy, Checkmarx, LiteLLM, Telnyx)
+- IPv6 CIDR ranges for all 4 CDNs (fixes false positives in fenceline install)
+- TLS certificate fingerprints for 7 registry domains
+- Weekly map freshness automation (.github/workflows/map-freshness.yml)
+- 27 new tests (62 total)
+
+### Fixed
+- `fenceline install` matcher now checks IPv6 ranges (was IPv4 only)
+- Removed `--scorecard` no-op flag
+
 ## [0.2.0] - 2026-03-31
 
 ### Added

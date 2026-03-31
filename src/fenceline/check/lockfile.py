@@ -1,8 +1,9 @@
-"""Parse package-lock.json files and compute diffs between versions."""
+"""Parse lockfiles (package-lock.json, Pipfile.lock, requirements.txt) and compute diffs."""
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +61,92 @@ def parse_lockfile(path: Path) -> dict:
     return packages
 
 
+def parse_pipfile_lock(path: Path) -> dict:
+    """Load a Pipfile.lock and return a normalised package map.
+
+    Pipfile.lock is JSON with ``default`` and ``develop`` sections, each
+    mapping package names to ``{version, hashes, ...}``.  Returns a dict
+    keyed by package name whose values have ``version``, ``resolved``,
+    ``integrity``, and ``hasInstallScript`` fields (the latter two are
+    ``None``/``False`` for pip packages).
+    """
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+
+    packages: dict[str, dict] = {}
+    for section in ("default", "develop"):
+        for name, meta in raw.get(section, {}).items():
+            version = meta.get("version", "")
+            # Pipfile.lock versions are prefixed with "==" — strip it.
+            if version.startswith("=="):
+                version = version[2:]
+            packages[name] = {
+                "version": version,
+                "resolved": None,
+                "integrity": None,
+                "hasInstallScript": False,
+            }
+
+    return packages
+
+
+def parse_requirements_txt(path: Path) -> list[dict]:
+    """Parse a requirements.txt file and return a list of package dicts.
+
+    Each line is expected to be ``package==version``.  Lines starting
+    with ``#``, ``-``, or blank lines are skipped.  Returns a list of
+    dicts with ``name`` and ``version`` keys.
+    """
+    packages: list[dict] = []
+    text = path.read_text(encoding="utf-8")
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("-"):
+            continue
+        match = re.match(r"^([A-Za-z0-9_.-]+)==([^\s;#]+)", line)
+        if match:
+            packages.append({"name": match.group(1).lower(), "version": match.group(2)})
+
+    return packages
+
+
+def parse_requirements_txt_as_map(path: Path) -> dict:
+    """Parse requirements.txt into a normalised package map (same shape as lockfile parsers)."""
+    packages: dict[str, dict] = {}
+    for pkg in parse_requirements_txt(path):
+        packages[pkg["name"]] = {
+            "version": pkg["version"],
+            "resolved": None,
+            "integrity": None,
+            "hasInstallScript": False,
+        }
+    return packages
+
+
+# Ordered by preference.
+_LOCKFILE_CANDIDATES = [
+    ("npm", "package-lock.json"),
+    ("pipfile", "Pipfile.lock"),
+    ("requirements", "requirements.txt"),
+    ("yarn", "yarn.lock"),
+    ("pnpm", "pnpm-lock.yaml"),
+]
+
+
+def detect_lockfile(directory: Path) -> tuple[str, Path] | None:
+    """Auto-detect which lockfile exists in *directory*.
+
+    Checks in order: package-lock.json, Pipfile.lock, requirements.txt,
+    yarn.lock, pnpm-lock.yaml.  Returns ``(type, path)`` or ``None``.
+    """
+    for lockfile_type, filename in _LOCKFILE_CANDIDATES:
+        candidate = directory / filename
+        if candidate.is_file():
+            return (lockfile_type, candidate)
+    return None
+
+
 def _strip_node_modules(key: str) -> str:
     """Strip the ``node_modules/`` prefix from a packages key.
 
@@ -76,11 +163,16 @@ def _strip_node_modules(key: str) -> str:
     return ""
 
 
-def get_base_lockfile(lockfile_path: Path, base_ref: str) -> dict | None:
+def get_base_lockfile(
+    lockfile_path: Path,
+    base_ref: str,
+    lockfile_type: str = "npm",
+) -> dict | None:
     """Retrieve the lockfile content from a git ref.
 
     Returns the parsed package map, or ``None`` if the file does not
-    exist at *base_ref*.
+    exist at *base_ref*.  *lockfile_type* should be ``"npm"``,
+    ``"pipfile"``, or ``"requirements"``.
     """
     try:
         # Determine the repo-relative path.
@@ -103,16 +195,61 @@ def get_base_lockfile(lockfile_path: Path, base_ref: str) -> dict | None:
         if result.returncode != 0:
             return None
 
-        raw = json.loads(result.stdout)
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError):
+        content = result.stdout
+    except (subprocess.CalledProcessError, ValueError):
         return None
 
-    # Re-use the same normalisation logic.
+    return _parse_base_content(content, lockfile_type)
+
+
+def _parse_base_content(content: str, lockfile_type: str) -> dict | None:
+    """Parse raw lockfile content retrieved from git."""
+    if lockfile_type == "pipfile":
+        try:
+            raw = json.loads(content)
+        except json.JSONDecodeError:
+            return None
+        packages: dict[str, dict] = {}
+        for section in ("default", "develop"):
+            for name, meta in raw.get(section, {}).items():
+                version = meta.get("version", "")
+                if version.startswith("=="):
+                    version = version[2:]
+                packages[name] = {
+                    "version": version,
+                    "resolved": None,
+                    "integrity": None,
+                    "hasInstallScript": False,
+                }
+        return packages
+
+    if lockfile_type == "requirements":
+        packages = {}
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("-"):
+                continue
+            match = re.match(r"^([A-Za-z0-9_.-]+)==([^\s;#]+)", line)
+            if match:
+                packages[match.group(1).lower()] = {
+                    "version": match.group(2),
+                    "resolved": None,
+                    "integrity": None,
+                    "hasInstallScript": False,
+                }
+        return packages
+
+    # Default: npm
+    try:
+        raw = json.loads(content)
+    except json.JSONDecodeError:
+        return None
+
     lockfile_version = raw.get("lockfileVersion", 1)
     if lockfile_version < 2:
         return None
 
-    packages: dict[str, dict] = {}
+    packages = {}
     for key, meta in raw.get("packages", {}).items():
         if not key:
             continue

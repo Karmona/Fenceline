@@ -41,14 +41,19 @@ Progress: ██████░░░░ 7/10 attacks detectable with infrastruc
 
 ## Milestones
 
-- [x] Deep map published for 8 package managers
-- [x] 10 exploit case studies with full analysis
-- [x] CLI: `fenceline check` (lockfile diff scanner)
-- [x] CLI: `fenceline install` (install-time network monitor)
+- [x] Deep map published for 8 package managers (IPv4 + IPv6 + TLS certs)
+- [x] 11 exploit case studies with full analysis
+- [x] CLI: `fenceline check` (npm + PyPI lockfile scanner)
+- [x] CLI: `fenceline install` (install-time network monitor, IPv4 + IPv6)
 - [x] CLI: `fenceline init` (git hooks)
+- [x] CLI: `fenceline audit-actions` (GitHub Actions SHA pinning audit)
 - [x] GitHub Action definition
+- [x] Defense playbook (practical steps by role)
+- [x] Landscape with 8 defense approaches mapped
 - [x] Test harness with attack simulations
-- [x] 35 automated tests (lockfile, scoring, monitor, matcher)
+- [x] 62 automated tests
+- [x] Weekly map freshness automation
+- [ ] PyPI distribution (`pip install fenceline`)
 - [ ] OpenSSF Scorecard API integration
 - [ ] Plugin system for community detection rules
 - [ ] First external community contribution
