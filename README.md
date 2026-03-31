@@ -118,7 +118,7 @@ Options:
 fenceline check --base-ref main        # compare against a specific branch
 fenceline check --format json          # output as JSON
 fenceline check --format markdown      # output as markdown (for CI)
-fenceline check --scorecard            # also query OpenSSF Scorecard API
+fenceline check --scorecard            # query OpenSSF Scorecard API (planned)
 ```
 
 ### `fenceline install` — monitor network during package installs
@@ -191,7 +191,7 @@ Detection tools that use the map and other signals.
 | [`fenceline install`](src/fenceline/install/) — install-time network monitor (compare connections against deep map) | Done |
 | [`fenceline init`](src/fenceline/init/) — git hooks for auto-checking on lockfile changes | Done |
 | [25 automated tests](tests/) + [CI on every push](.github/workflows/ci.yml) | Done |
-| pip install distribution (`pip install -e .`) | Done |
+| Local install (`pip install -e .` from source) | Done |
 | Integrate with OpenSSF Scorecard API | Planned |
 
 ### Phase 3: CI/CD Integration `v0.3 — in progress`

@@ -29,8 +29,8 @@ def run(args) -> int:
         print("Error: no package-lock.json found.", file=sys.stderr)
         return 2
 
-    base_ref = getattr(args, "base_ref", "HEAD")
-    fmt = getattr(args, "format", "console")
+    base_ref = getattr(args, "base_ref", None) or "HEAD"
+    fmt = getattr(args, "format", "text") or "text"
 
     # --- Parse head lockfile ---
     try:

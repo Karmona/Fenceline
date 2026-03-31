@@ -57,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format",
     )
     check_parser.add_argument(
-        "--scorecard", action="store_true", help="Show risk scorecard"
+        "--scorecard", action="store_true", help="Query OpenSSF Scorecard API (planned, not yet implemented)"
     )
     check_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
