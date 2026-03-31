@@ -82,30 +82,120 @@ These require no additional tools — they are features of the package managers 
 
 ---
 
-## Gaps That Remain
+## Approaches to Supply Chain Defense
 
-Despite the breadth of tools listed above, significant gaps persist in the supply chain security ecosystem.
+Supply chain security is not one problem — it is several distinct problems, each addressed by different approaches. No single tool covers everything. Understanding the approaches helps you choose what combination makes sense for your situation.
 
-### 1. Cross-Ecosystem Capability Analysis
+> **Note:** This categorization is based on our research as of March 2026. Tools evolve rapidly. If any of this is outdated or incorrect, please [open an issue](https://github.com/Karmona/Fenceline/issues) — we want this to be accurate, not promotional.
 
-Google Capslock demonstrates that mapping packages to their system capabilities (network, filesystem, process execution) is a powerful security signal. But it only works for Go. There is no equivalent for npm, PyPI, Rust, Ruby, or any other ecosystem. Developers in those ecosystems have no way to ask "what can this package actually do on my system?" before installing it.
+### 1. Known Vulnerability Scanning
 
-### 2. Infrastructure Fingerprinting
+**What it does:** Matches your dependencies against databases of published CVEs and security advisories.
 
-No tool publishes or verifies the expected infrastructure behind legitimate packages — the IP addresses packages should download from, the ASNs their registries should resolve to, the TLS certificates their CDNs should present. This would make domain takeover and CDN compromise attacks detectable at the network level, but the data does not exist in any structured form.
+**Who does it:** Snyk, OWASP dep-scan, Dependabot, npm audit, GitHub Advisory Database
 
-### 3. Swift / Xcode Ecosystem
+**Strengths:** Mature, well-understood, high coverage for known issues. Automated remediation PRs.
 
-The Apple developer ecosystem has effectively zero supply chain security tooling. No scanner covers Swift Package Manager packages. No tool analyzes Xcode project configurations for supply chain risks. No behavioral analysis exists for SPM packages. This is a blind spot for every macOS and iOS developer.
+**Limitations:** Only catches vulnerabilities that have been discovered, reported, and catalogued. Cannot detect novel malicious packages or zero-day attacks. Often noisy — flags vulnerabilities in code paths your application never calls.
 
-### 4. Multi-Signal Unified Scoring
+### 2. Behavioral / Static Code Analysis
 
-Each tool produces its own signal: Scorecard gives a hygiene score, GuardDog flags pattern matches, Heisenberg rates metadata health, Socket analyzes behavior. No open-source project combines these signals into a unified risk assessment. Developers must run multiple tools and interpret the results themselves.
+**What it does:** Analyzes package source code for suspicious patterns — obfuscation, data exfiltration, credential harvesting, shell execution.
 
-### 5. macOS Developer Workstation Protection
+**Who does it:** Socket.dev (70+ signals), Datadog GuardDog (Semgrep/YARA rules), OpenSSF Package Analysis (gVisor sandbox)
 
-StepSecurity Harden-Runner monitors CI/CD (GitHub Actions only). Birdcage provides sandboxing primitives (stale). No tool monitors what packages do on a developer's local machine during `npm install` or `pip install`. Workstation compromise is the first step in many supply chain attacks, and it is unmonitored.
+**Strengths:** Can detect novel malicious packages that have no CVE. Socket's behavioral approach caught real attacks before any advisory existed.
 
-### 6. Pre-Install Behavioral Sandbox for Individual Developers
+**Limitations:** Rule-based approaches miss novel obfuscation. Sandbox approaches run at registry scale, not available to individual developers. Commercial tools require paid tiers for full coverage.
 
-OpenSSF Package Analysis runs sandboxed analysis at registry scale, but individual developers cannot easily run a package in a sandbox before installing it. There is no `npm install --sandbox` or `pip install --analyze-first`. The closest option is manually running GuardDog or SafeDep Vet, which use static analysis rather than behavioral observation.
+### 3. Package Metadata Analysis
+
+**What it does:** Checks package metadata for risk signals — age, maintainer changes, install scripts, download counts, publication patterns.
+
+**Who does it:** Heisenberg, SafeDep Vet, Fenceline (`fenceline check`), Aikido SafeChain (age gating)
+
+**Strengths:** Fast, no code analysis needed. Catches account takeover signals (new maintainer), suspicious timing (brand-new package), and common attack vectors (postinstall scripts). Works before any code executes.
+
+**Limitations:** Metadata can look normal even for malicious packages. A compromised maintainer account publishes under the same identity. Packages can be malicious without install scripts (runtime-only payloads like chalk/debug).
+
+### 4. Capability Analysis
+
+**What it does:** Maps packages to the system capabilities they can access — network, filesystem, process execution, environment variables.
+
+**Who does it:** Google Capslock (Go only)
+
+**Strengths:** Answers "what can this package actually do?" rather than "is this package bad?" If a logging library suddenly gains network access between versions, that is a strong signal regardless of whether any CVE exists.
+
+**Limitations:** Currently only available for Go. No equivalent exists for npm, PyPI, Rust, Ruby, or any other ecosystem. Building call-graph analysis for dynamic languages like JavaScript is significantly harder than for Go.
+
+### 5. Infrastructure Fingerprinting
+
+**What it does:** Documents the expected network infrastructure of package managers — which domains, IP ranges, ASNs, CDN providers, TLS certificates, and ports each tool should connect to during normal operation. Detects when actual connections deviate from this baseline.
+
+**Who does it:** Fenceline deep map ([map/](../map/))
+
+**As far as we know**, no other project publishes this data as a structured, machine-readable, open dataset. StepSecurity Harden-Runner monitors network connections in CI at runtime, but does not publish the expected-good baseline as reusable data. If we are wrong about this, please [let us know](https://github.com/Karmona/Fenceline/issues) — we would love to link to other sources.
+
+**Strengths:** Catches connections to unknown servers, non-standard ports, wrong CDN ranges, and unexpected uploads during install. Based on verifiable public data (DNS, certificate transparency, published CDN ranges). Works across all ecosystems.
+
+**Limitations:** IP addresses rotate (CDNs change IPs regularly). IPv6 coverage is still growing. Cannot detect attacks that exfiltrate through legitimate domains (e.g., Nx using api.github.com). Cannot detect attacks with no network component (logic bombs, sabotage).
+
+### 6. Runtime Network Monitoring (Local Dev)
+
+**What it does:** Monitors outbound network connections during package installation on a developer's machine, comparing against expected behavior.
+
+**Who does it:** Fenceline (`fenceline install`), Little Snitch / LuLu (general-purpose, not supply-chain-specific)
+
+**StepSecurity Harden-Runner** does this for CI/CD (GitHub Actions), but not for local development. General-purpose firewalls like Little Snitch monitor all traffic but don't know what npm's normal behavior looks like.
+
+**Strengths:** Catches exfiltration, C2 beaconing, and mining connections in real time during the install window.
+
+**Limitations:** Polling-based (500ms interval, may miss very short connections). Cannot see inside encrypted traffic. Only monitors during the install command — runtime payloads that activate later are not caught.
+
+### 7. Cooldown / Age Gating
+
+**What it does:** Delays installation of newly published package versions, giving the community time to detect and report malicious releases.
+
+**Who does it:** npm (`min-release-age`), pnpm (`minimumReleaseAge`), Yarn (`npmMinimalAgeGate`), Aikido SafeChain (48hr default)
+
+**Strengths:** Extremely simple. One config line. Would have blocked most fast-moving account takeover attacks where malicious versions were detected within days.
+
+**Limitations:** Does not help with slow-burn attacks (XZ Utils took 2 years). Does not help with compromised legitimate packages that pass the age threshold.
+
+### 8. Provenance Verification
+
+**What it does:** Cryptographically verifies that a published package was built from a specific source commit via a specific CI pipeline.
+
+**Who does it:** npm + Sigstore, PyPI trusted publishing, crates.io trusted publishing, Fenceline (`fenceline check` checks for attestations)
+
+**Strengths:** Detects tampered packages — if a malicious version was published from an attacker's machine rather than the project's CI, it will lack the provenance attestation. The axios attack was detectable this way.
+
+**Limitations:** Adoption is still voluntary — most packages don't have provenance yet. Does not help if the CI pipeline itself is compromised (the malicious build would get a valid attestation).
+
+### How These Approaches Complement Each Other
+
+No single approach catches every attack. Here's how they layer:
+
+| Attack type | What catches it |
+|-------------|----------------|
+| Known CVE in dependency | Vulnerability scanning (1) |
+| Malicious code in new package | Behavioral analysis (2) + metadata (3) + cooldown (7) |
+| Account takeover / phished maintainer | Metadata (3) + provenance (8) + cooldown (7) |
+| Capability escalation between versions | Capability analysis (4) |
+| Connection to C2 server during install | Infrastructure fingerprinting (5) + runtime monitoring (6) |
+| DNS poisoning / CDN hijack | Infrastructure fingerprinting (5) |
+| Logic bomb / sabotage (no network) | Behavioral analysis (2) — network monitoring cannot help |
+| Exfiltration via legitimate domain | None fully — requires HTTP-level behavioral analysis |
+
+The strongest defense combines approaches from multiple categories. Fenceline contributes to approaches 3, 5, 6, and 8, and aims to complement (not replace) tools covering approaches 1, 2, and 4.
+
+## Remaining Gaps
+
+Even with all approaches above, some gaps persist:
+
+- **Cross-ecosystem capability analysis** — Capslock works for Go only. npm, PyPI, Rust have nothing equivalent.
+- **Swift / Xcode ecosystem** — effectively zero supply chain security tooling exists for Apple developers.
+- **Pre-install behavioral sandbox for individuals** — OpenSSF Package Analysis runs at registry scale, not on developer machines.
+- **HTTP-level behavioral analysis** — detecting exfiltration through legitimate domains (like Nx using api.github.com) requires understanding expected HTTP methods and paths, not just domains.
+
+> If you know of tools or approaches we've missed, please [open an issue](https://github.com/Karmona/Fenceline/issues). This landscape evolves weekly and we want it to be accurate.
