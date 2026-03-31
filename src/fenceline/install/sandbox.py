@@ -68,6 +68,45 @@ def _docker() -> str:
     return _DOCKER_BIN
 
 
+def _extract_package_name(cmd: list[str]) -> Optional[str]:
+    """Extract the main package name from an install command.
+
+    Examples:
+        ["npm", "install", "express"] → "express"
+        ["pip", "install", "requests"] → "requests"
+        ["npm", "install", "express@4.18"] → "express"
+        ["npm", "install", "--save", "express"] → "express"
+    """
+    # Skip the tool name and the "install"/"add" verb
+    args = cmd[1:] if cmd else []
+
+    # Skip known verbs
+    verbs = {"install", "add", "i"}
+    args = [a for a in args if a.lower() not in verbs]
+
+    # Skip flags (start with -)
+    args = [a for a in args if not a.startswith("-")]
+
+    if not args:
+        return None
+
+    pkg = args[0]
+    # Strip version specifier: express@4.18 → express
+    if "@" in pkg and not pkg.startswith("@"):
+        pkg = pkg.split("@")[0]
+    # Handle scoped packages: @scope/name@version → @scope/name
+    elif pkg.startswith("@") and "@" in pkg[1:]:
+        at_idx = pkg.index("@", 1)
+        pkg = pkg[:at_idx]
+    # Python: requests==2.31 → requests
+    if "==" in pkg:
+        pkg = pkg.split("==")[0]
+    if ">=" in pkg:
+        pkg = pkg.split(">=")[0]
+
+    return pkg if pkg else None
+
+
 def docker_available() -> bool:
     """Check if Docker is installed and the daemon is running."""
     try:
@@ -367,21 +406,49 @@ class SandboxedInstall:
             alerts = monitor.stop()
             return alerts, 130
 
-        # Stop monitor, collect alerts
+        # --- Stage 1 complete: check for install-time alerts ---
+        stage1_alerts = list(monitor._alerts)
+
+        if stage1_alerts:
+            alerts = monitor.stop()
+            self._print_alerts("Stage 1 (install)", alerts)
+            print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
+            self._kill_container()
+            return alerts, 1
+
+        # --- Stage 2: Import test ---
+        # After install looks clean, try importing the package inside the
+        # container. Many attacks activate on require()/import, not during
+        # install. The container is still alive (sleep period).
+        pkg_name = _extract_package_name(cmd)
+        if pkg_name:
+            print(f"[fenceline] Sandbox: Stage 2 — testing import of '{pkg_name}'...")
+            try:
+                if tool_id in ("npm", "npx", "yarn", "pnpm"):
+                    subprocess.run(
+                        [_docker(), "exec", self._container_id,
+                         "node", "-e", f"require('{pkg_name}')"],
+                        capture_output=True, timeout=30,
+                    )
+                elif tool_id in ("pip", "pip3"):
+                    subprocess.run(
+                        [_docker(), "exec", self._container_id,
+                         "python3", "-c", f"import {pkg_name}"],
+                        capture_output=True, timeout=30,
+                    )
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+
+            # Give monitor time to catch import-triggered connections
+            time.sleep(5)
+
+        # --- Final check: all alerts from both stages ---
         alerts = monitor.stop()
 
         if alerts:
-            print(f"\n[fenceline] Sandbox: {len(alerts)} suspicious connection(s) detected!")
-            for alert in alerts:
-                icon = "!!" if alert.severity == "critical" else "?"
-                print(
-                    f"  {icon} [{alert.severity.upper()}] "
-                    f"{alert.connection.process_name} -> "
-                    f"{alert.connection.remote_ip}:{alert.connection.remote_port} "
-                    f"— {alert.reason}"
-                )
+            stage = "Stage 2 (import)" if pkg_name else "install"
+            self._print_alerts(stage, alerts)
             print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
-            print(f"[fenceline] Sandbox: container {self._container_id} will be removed.")
             self._kill_container()
             return alerts, 1
 
@@ -394,6 +461,18 @@ class SandboxedInstall:
         self._kill_container()
         print(f"[fenceline] Sandbox: done. Install verified and applied.")
         return alerts, exit_code
+
+    def _print_alerts(self, stage: str, alerts: List[Alert]) -> None:
+        """Print alert details."""
+        print(f"\n[fenceline] Sandbox: {len(alerts)} suspicious connection(s) in {stage}!")
+        for alert in alerts:
+            icon = "!!" if alert.severity == "critical" else "?"
+            print(
+                f"  {icon} [{alert.severity.upper()}] "
+                f"{alert.connection.process_name} -> "
+                f"{alert.connection.remote_ip}:{alert.connection.remote_port} "
+                f"— {alert.reason}"
+            )
 
     def _copy_artifacts(self, container_path: str, host_dir: Path) -> None:
         """Copy install artifacts from container to host."""

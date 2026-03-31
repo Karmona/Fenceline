@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-03-31
+
+### Added
+- Stage 2 import monitoring in Docker sandbox
+  - After install, runs require()/import inside container
+  - Catches attacks that activate on module load (event-stream, chalk/debug, TeamPCP)
+- --monitor-time flag for fenceline install (default 60s, configurable)
+- Detection scorecard in README (7/11 attacks prevented)
+
+### Changed
+- Documentation rewrite: sandbox is now the lead feature
+- Homepage restructured around prevention, not just detection
+- Landscape updated with "safety without detection" concept
+- Playbook defaults to --sandbox for all install commands
+
+### Fixed
+- Shell quoting in Docker sandbox (shlex.quote)
+
 ## [0.4.0] - 2026-03-31
 
 ### Added

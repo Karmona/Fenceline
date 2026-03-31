@@ -28,7 +28,25 @@ cd testing && ./harness.sh
 
 ## What Our Tools Detect
 
-Here's how `fenceline check` and `fenceline install` perform against each attack pattern:
+Here's how `fenceline check` and `fenceline install --sandbox` perform against each attack pattern:
+
+### Detection Matrix
+
+| Attack | Map only (no sandbox) | With sandbox (Stage 1 + Stage 2) | Safety even if missed |
+|--------|----------------------|----------------------------------|----------------------|
+| event-stream | YES (metadata signals) | YES (Stage 2 catches import payload) | Sandbox isolates damage |
+| ua-parser-js | YES (postinstall script) | YES (Stage 1 catches outbound) | Container killed on alert |
+| Codecov | YES (unknown IP) | YES (Stage 1 catches unknown IP) | Container killed on alert |
+| colors.js/faker.js | NO (no network) | NO (no network) | Sandbox limits blast radius to container |
+| XZ Utils | NO (passive backdoor) | NO (passive backdoor) | Sandbox limits blast radius to container |
+| Ultralytics | YES (non-443 port) | YES (Stage 1 catches mining port) | Container killed on alert |
+| Nx/s1ngularity | PARTIAL (legitimate domain) | PARTIAL (legitimate domain) | Sandbox isolates exfiltrated data |
+| chalk/debug | NO (runtime only) | YES (Stage 2 catches import payload) | Container killed on alert |
+| Axios RAT | YES (unknown IP + port) | YES (Stage 1 catches outbound) | Container killed on alert |
+| TeamPCP: LiteLLM | NO (.pth file) | YES (Stage 2 triggers .pth on import) | Container killed on alert |
+| TeamPCP: Telnyx | NO (steganographic) | NO (steganographic) | Sandbox limits blast radius to container |
+
+### Detailed Tool Breakdown
 
 ### `fenceline check` (lockfile diff scanner)
 
@@ -51,17 +69,23 @@ Scans lockfile changes and queries npm registry. Catches risks **before install*
          + 5  new_package: Newly added dependency
 ```
 
-### `fenceline install` (network monitor)
+### `fenceline install --sandbox` (Docker sandbox + network monitor)
 
-Monitors outbound connections during `npm install`, scoped to the install process. Catches anomalies **during install**.
+Runs package installs inside a Docker container and monitors network from outside. Two-stage detection:
 
-**Important limitation:** The current implementation runs the install on your actual machine. If a package is malicious, the code has already executed by the time the alert fires. This is observational, not preventive. The [Phase 4 roadmap](../README.md#phase-4-sandboxed-install-v10--the-real-goal) addresses this by running installs inside a Docker container and monitoring from outside — so untrusted code never touches your machine.
+- **Stage 1 (install):** Monitors outbound connections during `npm install` / `pip install` inside the container. Catches exfiltration, C2 beaconing, mining connections.
+- **Stage 2 (import):** After install completes, runs `require()` / `import` inside the container to trigger module-load payloads. Catches attacks that activate on first import, not during install.
 
-| Signal | What it catches | Real attacks this would flag |
-|--------|----------------|------------------------------|
-| Connection to unknown IP | IP outside known CDN ranges | Codecov (178.62.86.114), Axios (142.11.206.73) |
-| Non-443 port | Unusual port during install | Ultralytics (port 8080), Axios (port 8000), ua-parser-js (mining ports) |
-| Wrong CDN for tool | npm connecting via non-Cloudflare IP | DNS poisoning, CDN hijack |
+If anything suspicious is detected, the container is killed — nothing touches your host machine.
+
+**Requires Docker.** Without Docker, falls back to host-based monitoring with a clear warning.
+
+| Signal | Stage | What it catches | Real attacks this would flag |
+|--------|-------|----------------|------------------------------|
+| Connection to unknown IP | 1 | IP outside known CDN ranges | Codecov (178.62.86.114), Axios (142.11.206.73) |
+| Non-443 port | 1 | Unusual port during install | Ultralytics (port 8080), Axios (port 8000), ua-parser-js (mining ports) |
+| Wrong CDN for tool | 1 | npm connecting via non-Cloudflare IP | DNS poisoning, CDN hijack |
+| Network on import | 2 | Module phones home when loaded | event-stream, chalk/debug, TeamPCP LiteLLM |
 
 **Example output** (tested with `fenceline install npm install is-even`):
 ```
@@ -98,11 +122,20 @@ Being honest about what's outside our detection capability is as important as sh
 | Attack | Why we miss it | What's needed |
 |--------|---------------|---------------|
 | **TeamPCP: Trivy/Checkmarx** (GitHub Actions tag tampering) | We don't monitor CI/CD pipelines or GitHub Actions | Action SHA pinning verification tool |
-| **TeamPCP: LiteLLM** (`.pth` file persistence) | `.pth` files execute on Python import, not during `pip install` — our monitor only watches the install window | Post-install runtime monitoring or `.pth` file scanning |
 | **TeamPCP: Telnyx** (payload in `.WAV` file) | Steganographic payloads are invisible to network monitoring and metadata checks | Source code / binary analysis |
 | **colors.js/faker.js** (logic bomb, no network) | No outbound connections to detect | Code analysis, not network monitoring |
 | **XZ Utils** (passive SSH backdoor) | No outbound connections — waits for inbound trigger | Build system / binary analysis |
 | **Nx/s1ngularity** (exfil via api.github.com) | Uses a legitimate domain we'd allowlist | HTTP method/path behavioral analysis |
+
+### What the sandbox catches that we previously missed
+
+Stage 2 import monitoring now detects attacks that activate on module load rather than during install:
+
+| Attack | How it's caught |
+|--------|----------------|
+| **event-stream** | Malicious payload triggers on `require('event-stream')` — Stage 2 catches the outbound connection |
+| **chalk/debug** (phished maintainer) | Injected code runs on import, not via install scripts — Stage 2 catches the network call |
+| **TeamPCP: LiteLLM** (`.pth` file persistence) | `.pth` files execute on Python import — Stage 2 triggers them inside the container |
 
 ### Partially addressed
 

@@ -77,6 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
              "Blocks install if suspicious network activity is detected.",
     )
     install_parser.add_argument(
+        "--monitor-time",
+        type=int,
+        default=60,
+        help="Seconds to monitor network after install completes (default: 60)",
+    )
+    install_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
     )
     install_parser.add_argument(

@@ -34,11 +34,13 @@ fenceline check
 fenceline check --base-ref main    # compare against main branch
 ```
 
-**Monitor network during installs** (note: this runs on your machine — it detects anomalies but does not prevent execution. A future version will use Docker sandboxing for true isolation):
+**Monitor network during installs** (runs inside a Docker sandbox — suspicious packages are killed before touching your machine):
 
 ```bash
-fenceline install npm install <pkg>
+fenceline install --sandbox npm install <pkg>
 ```
+
+> Requires Docker. Use `--monitor-time 120` to extend the monitoring window beyond the default 60 seconds.
 
 **Verify provenance signatures:**
 
@@ -82,11 +84,13 @@ pip-compile requirements.in    # generates requirements.txt with pinned versions
 pip-sync                       # installs exactly what's in requirements.txt
 ```
 
-**Monitor network during installs** (observational — runs on your machine, see note above):
+**Monitor network during installs** (runs inside a Docker sandbox):
 
 ```bash
-fenceline install pip install <pkg>
+fenceline install --sandbox pip install <pkg>
 ```
+
+> Requires Docker. Use `--monitor-time 120` to extend the monitoring window beyond the default 60 seconds.
 
 **Enable 2FA on PyPI:** Go to https://pypi.org/manage/account/ and enable two-factor authentication.
 
@@ -244,7 +248,7 @@ git log --oneline --all -- requirements.txt
 | Phished maintainer | Provenance check | `npm audit signatures` |
 | Malicious postinstall | Disable scripts | `npm config set ignore-scripts true` |
 | Actions tag tampering | SHA pinning | `fenceline audit-actions` |
-| Unknown network calls | Monitor install | `fenceline install npm install <pkg>` |
+| Unknown network calls | Sandboxed install | `fenceline install --sandbox npm install <pkg>` |
 | Risky lockfile changes | Check before merge | `fenceline check` |
 | Stale tokens | Revoke unused | `npm token list` then `npm token revoke` |
 

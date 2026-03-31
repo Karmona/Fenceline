@@ -6,24 +6,25 @@ Fenceline tracks its progress against real-world supply chain attacks. Every exp
 
 ## Detection Coverage
 
-Based on analysis of 10 major supply chain attacks (2018-2026):
+Based on analysis of 11 major supply chain attacks (2018-2026):
 
 ```
-Progress: ██████░░░░ 7/10 attacks detectable with infrastructure map
+Progress: ███████░░░ 7/11 attacks preventable with Docker sandbox
 ```
 
-| # | Attack | Year | Map Catches It? |
-|---|--------|------|----------------|
-| 1 | event-stream | 2018 | YES |
-| 2 | ua-parser-js | 2021 | YES |
-| 3 | Codecov | 2021 | YES |
-| 4 | colors.js/faker.js | 2022 | NO (no network) |
-| 5 | XZ Utils | 2024 | NO (passive backdoor) |
+| # | Attack | Year | Sandbox Prevents It? |
+|---|--------|------|---------------------|
+| 1 | event-stream | 2018 | YES (Stage 2 catches import payload) |
+| 2 | ua-parser-js | 2021 | YES (Stage 1 catches outbound) |
+| 3 | Codecov | 2021 | YES (Stage 1 catches unknown IP) |
+| 4 | colors.js/faker.js | 2022 | NO (no network) — sandbox limits blast radius |
+| 5 | XZ Utils | 2024 | NO (passive backdoor) — sandbox limits blast radius |
 | 6 | Polyfill.io | 2024 | PARTIAL |
-| 7 | Ultralytics | 2024 | YES |
-| 8 | Nx/s1ngularity | 2025 | PARTIAL |
-| 9 | chalk/debug | 2025 | YES |
-| 10 | Axios RAT | 2026 | YES |
+| 7 | Ultralytics | 2024 | YES (Stage 1 catches mining port) |
+| 8 | Nx/s1ngularity | 2025 | PARTIAL (legitimate domain) — sandbox isolates exfil |
+| 9 | chalk/debug | 2025 | YES (Stage 2 catches import payload) |
+| 10 | Axios RAT | 2026 | YES (Stage 1 catches outbound) |
+| 11 | TeamPCP: LiteLLM | 2026 | YES (Stage 2 triggers .pth on import) |
 
 ## Attack Pattern Coverage
 
@@ -45,14 +46,18 @@ Progress: ██████░░░░ 7/10 attacks detectable with infrastruc
 - [x] 11 exploit case studies with full analysis
 - [x] CLI: `fenceline check` (npm + PyPI lockfile scanner)
 - [x] CLI: `fenceline install` (install-time network monitor, IPv4 + IPv6)
+- [x] CLI: `fenceline install --sandbox` (Docker-sandboxed installs)
+- [x] Stage 2 import monitoring (catches module-load payloads)
 - [x] CLI: `fenceline init` (git hooks)
 - [x] CLI: `fenceline audit-actions` (GitHub Actions SHA pinning audit)
 - [x] GitHub Action definition
 - [x] Defense playbook (practical steps by role)
-- [x] Landscape with 8 defense approaches mapped
+- [x] Landscape with 9 defense approaches mapped (including sandbox + safety-without-detection)
 - [x] Test harness with attack simulations
-- [x] 62 automated tests
+- [x] 83 automated tests
 - [x] Weekly map freshness automation
+- [ ] File system diffing (compare container state before/after install)
+- [ ] HTTP method/path behavioral analysis (detect exfil via legitimate domains)
 - [ ] PyPI distribution (`pip install fenceline`)
 - [ ] OpenSSF Scorecard API integration
 - [ ] Plugin system for community detection rules

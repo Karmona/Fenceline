@@ -38,13 +38,15 @@ def run(args) -> int:
         print("Usage: fenceline install [--sandbox] <command...>", file=sys.stderr)
         return 1
 
+    monitor_time = getattr(args, 'monitor_time', 60)
+
     if sandbox:
-        return _run_sandboxed(cmd)
+        return _run_sandboxed(cmd, monitor_time)
     else:
         return _run_host(cmd)
 
 
-def _run_sandboxed(cmd: list[str]) -> int:
+def _run_sandboxed(cmd: list[str], monitor_time: int = 60) -> int:
     """Run install in a Docker container (preventive — blocks if suspicious)."""
     from fenceline.install.sandbox import SandboxedInstall, docker_available
 
@@ -58,7 +60,7 @@ def _run_sandboxed(cmd: list[str]) -> int:
         return 1
 
     deep_map = load_maps()
-    sandbox = SandboxedInstall(deep_map)
+    sandbox = SandboxedInstall(deep_map, monitor_seconds=monitor_time)
     alerts, exit_code = sandbox.run(cmd)
     return exit_code
 

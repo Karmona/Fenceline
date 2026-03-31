@@ -140,17 +140,27 @@ Supply chain security is not one problem — it is several distinct problems, ea
 
 **Limitations:** IP addresses rotate (CDNs change IPs regularly). IPv6 coverage is still growing. Cannot detect attacks that exfiltrate through legitimate domains (e.g., Nx using api.github.com). Cannot detect attacks with no network component (logic bombs, sabotage).
 
-### 6. Runtime Network Monitoring (Local Dev)
+### 6. Sandboxed Install with Network Monitoring
 
-**What it does:** Monitors outbound network connections during package installation on a developer's machine, comparing against expected behavior.
+**What it does:** Runs package installs inside a Docker container and monitors network from outside. Two stages: Stage 1 monitors during install; Stage 2 runs `require()` / `import` inside the container to trigger module-load payloads. If anything suspicious is detected, the container is killed — untrusted code never touches the host machine.
 
-**Who does it:** Fenceline (`fenceline install`), Little Snitch / LuLu (general-purpose, not supply-chain-specific)
+**Who does it:** Fenceline (`fenceline install --sandbox`), OpenSSF Package Analysis (registry-scale gVisor sandbox)
 
-**StepSecurity Harden-Runner** does this for CI/CD (GitHub Actions), but not for local development. General-purpose firewalls like Little Snitch monitor all traffic but don't know what npm's normal behavior looks like.
+**StepSecurity Harden-Runner** does this for CI/CD (GitHub Actions), but not for local development. General-purpose firewalls like Little Snitch monitor all traffic but don't know what npm's normal behavior looks like. Fenceline is the only tool we know of that provides sandboxed install monitoring for individual developers.
 
-**Strengths:** Catches exfiltration, C2 beaconing, and mining connections in real time during the install window.
+**Strengths:** Catches exfiltration, C2 beaconing, and mining connections during install AND during first import. Stage 2 import monitoring catches attacks that activate on module load (event-stream, chalk/debug, TeamPCP LiteLLM). Because the install runs in a throwaway container, even undetected attacks are isolated from the host.
 
-**Limitations:** Polling-based (500ms interval, may miss very short connections). Cannot see inside encrypted traffic. Only monitors during the install command — runtime payloads that activate later are not caught.
+**Limitations:** Requires Docker. Polling-based (500ms interval, may miss very short connections). Cannot see inside encrypted traffic. Cannot detect attacks with no network component (logic bombs, sabotage).
+
+### 6a. Safety Without Detection
+
+**What it does:** Even when no suspicious network activity is detected, running installs inside a throwaway Docker container limits the blast radius of any attack. A malicious postinstall script that writes to the filesystem, modifies system files, or plants persistence mechanisms is confined to a container that gets destroyed.
+
+**Who does it:** Fenceline (`fenceline install --sandbox`), Phylum Birdcage (process-level sandboxing, stale)
+
+**Strengths:** Provides a safety floor regardless of detection capability. Attacks that would succeed on a bare host (file system tampering, environment variable theft, credential harvesting) are contained. No detection rules needed — isolation is the defense.
+
+**Limitations:** If the sandbox copies artifacts (e.g., node_modules) to the host after a clean install, a sophisticated attack that embeds malicious code in the artifacts without triggering network activity during install or import could still reach the host. File system diffing (comparing container state before/after install) is a future mitigation.
 
 ### 7. Cooldown / Age Gating
 
@@ -182,12 +192,13 @@ No single approach catches every attack. Here's how they layer:
 | Malicious code in new package | Behavioral analysis (2) + metadata (3) + cooldown (7) |
 | Account takeover / phished maintainer | Metadata (3) + provenance (8) + cooldown (7) |
 | Capability escalation between versions | Capability analysis (4) |
-| Connection to C2 server during install | Infrastructure fingerprinting (5) + runtime monitoring (6) |
+| Connection to C2 server during install | Infrastructure fingerprinting (5) + sandboxed monitoring (6) |
+| Payload activates on import (not install) | Sandboxed import monitoring (6, Stage 2) |
 | DNS poisoning / CDN hijack | Infrastructure fingerprinting (5) |
-| Logic bomb / sabotage (no network) | Behavioral analysis (2) — network monitoring cannot help |
-| Exfiltration via legitimate domain | None fully — requires HTTP-level behavioral analysis |
+| Logic bomb / sabotage (no network) | Behavioral analysis (2) — network monitoring cannot help, but sandbox (6a) limits blast radius |
+| Exfiltration via legitimate domain | None fully — requires HTTP-level behavioral analysis, but sandbox (6a) isolates the damage |
 
-The strongest defense combines approaches from multiple categories. Fenceline contributes to approaches 3, 5, 6, and 8, and aims to complement (not replace) tools covering approaches 1, 2, and 4.
+The strongest defense combines approaches from multiple categories. Fenceline contributes to approaches 3, 5, 6, 6a, and 8, and aims to complement (not replace) tools covering approaches 1, 2, and 4.
 
 ## Remaining Gaps
 
@@ -195,7 +206,7 @@ Even with all approaches above, some gaps persist:
 
 - **Cross-ecosystem capability analysis** — Capslock works for Go only. npm, PyPI, Rust have nothing equivalent.
 - **Swift / Xcode ecosystem** — effectively zero supply chain security tooling exists for Apple developers.
-- **Pre-install behavioral sandbox for individuals** — OpenSSF Package Analysis runs at registry scale, not on developer machines.
+- **~~Pre-install behavioral sandbox for individuals~~** — ~~OpenSSF Package Analysis runs at registry scale, not on developer machines.~~ Addressed: Fenceline `--sandbox` runs installs in Docker containers on developer machines.
 - **HTTP-level behavioral analysis** — detecting exfiltration through legitimate domains (like Nx using api.github.com) requires understanding expected HTTP methods and paths, not just domains.
 
 > If you know of tools or approaches we've missed, please [open an issue](https://github.com/Karmona/Fenceline/issues). This landscape evolves weekly and we want it to be accurate.
