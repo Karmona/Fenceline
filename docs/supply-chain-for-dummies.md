@@ -66,15 +66,14 @@ These are concrete steps you can take today. None require special tools or paid 
 
 Start by making sure you're on a recent version of your package manager — the security features below require it:
 
+Check your current version:
 ```bash
-# Check your current version
 npm --version
+```
 
-# Update npm to latest (needed for cooldown + provenance features)
+Update to latest:
+```bash
 npm install -g npm@latest
-
-# Verify
-npm --version
 ```
 
 The steps below assume npm v11+ (or pnpm v10.16+ / Yarn v4.10+). If you can't update, skip to step 2 — the other steps work on any version.
@@ -85,15 +84,19 @@ Package managers now support delaying installation of newly published versions. 
 
 Pick your package manager and run one command (sets a 7-day cooldown, value in minutes):
 
+**npm** (v11+):
 ```bash
-# pnpm (v10.16+)
-pnpm config set minimumReleaseAge 10080
-
-# npm (v11+)
 npm config set minimum-release-age 10080
+```
 
-# Yarn (v4.10+) — add to .yarnrc.yml:
-# npmMinimalAgeGate: 10080
+**pnpm** (v10.16+):
+```bash
+pnpm config set minimumReleaseAge 10080
+```
+
+**Yarn** (v4.10+) — no CLI command, add this line to `.yarnrc.yml`:
+```yaml
+npmMinimalAgeGate: 10080
 ```
 
 ### 2. Disable install scripts for untrusted packages
@@ -176,7 +179,11 @@ Homebrew is the **only** major package manager that sends analytics data (to Inf
 
 ```bash
 brew analytics off
-# Or add to your shell profile:
+```
+
+To make it permanent, add this to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
 export HOMEBREW_NO_ANALYTICS=1
 ```
 
