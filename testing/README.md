@@ -89,9 +89,20 @@ These are the attack patterns our tools cannot currently detect. Each gap is a t
 | Very short-lived connections | Polling every 500ms can miss sub-500ms connections | Theoretical | eBPF or dtrace for kernel-level capture |
 | DNS exfiltration | Data encoded in DNS queries (long subdomains) | Various | DNS query monitoring |
 
-### Partially addressed
+### What we would NOT catch
 
-These have some coverage but aren't complete:
+Being honest about what's outside our detection capability is as important as showing what we catch.
+
+| Attack | Why we miss it | What's needed |
+|--------|---------------|---------------|
+| **TeamPCP: Trivy/Checkmarx** (GitHub Actions tag tampering) | We don't monitor CI/CD pipelines or GitHub Actions | Action SHA pinning verification tool |
+| **TeamPCP: LiteLLM** (`.pth` file persistence) | `.pth` files execute on Python import, not during `pip install` — our monitor only watches the install window | Post-install runtime monitoring or `.pth` file scanning |
+| **TeamPCP: Telnyx** (payload in `.WAV` file) | Steganographic payloads are invisible to network monitoring and metadata checks | Source code / binary analysis |
+| **colors.js/faker.js** (logic bomb, no network) | No outbound connections to detect | Code analysis, not network monitoring |
+| **XZ Utils** (passive SSH backdoor) | No outbound connections — waits for inbound trigger | Build system / binary analysis |
+| **Nx/s1ngularity** (exfil via api.github.com) | Uses a legitimate domain we'd allowlist | HTTP method/path behavioral analysis |
+
+### Partially addressed
 
 | Gap | Current status | What's needed to close it |
 |-----|---------------|---------------------------|
