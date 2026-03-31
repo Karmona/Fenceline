@@ -84,7 +84,7 @@ If anything suspicious is detected, the container is killed — nothing touches 
 
 | Signal | Stage | What it catches | Real attacks this would flag |
 |--------|-------|----------------|------------------------------|
-| Connection to unknown IP | 1 | IP outside known CDN ranges | Codecov (178.62.86.114), Axios (142.11.206.73) |
+| Connection to unknown IP | 1 | IP outside known CDN ranges | Axios (142.11.206.73) |
 | Non-443 port | 1 | Unusual port during install | Ultralytics (port 8080), Axios (port 8000), ua-parser-js (mining ports) |
 | Wrong CDN for tool | 1 | npm connecting via non-Cloudflare IP | DNS poisoning, CDN hijack |
 | Network on import | 2 | Module phones home when loaded | event-stream, chalk/debug, TeamPCP LiteLLM |
@@ -123,7 +123,7 @@ Being honest about what's outside our detection capability is as important as sh
 
 | Attack | Why we miss it | What's needed |
 |--------|---------------|---------------|
-| **TeamPCP: Trivy/Checkmarx** (GitHub Actions tag tampering) | We don't monitor CI/CD pipelines or GitHub Actions | Action SHA pinning verification tool |
+| **TeamPCP: Trivy/Checkmarx** (GitHub Actions tag tampering) | We don't monitor CI/CD pipelines or GitHub Actions | Use `fenceline audit-actions` for SHA pinning. Runtime CI pipeline monitoring remains out of scope. |
 | **TeamPCP: Telnyx** (payload in `.WAV` file) | Steganographic payloads are invisible to network monitoring and metadata checks | Source code / binary analysis |
 | **colors.js/faker.js** (logic bomb, no network) | No outbound connections to detect | Code analysis, not network monitoring |
 | **XZ Utils** (passive SSH backdoor) | No outbound connections — waits for inbound trigger | Build system / binary analysis |
@@ -145,7 +145,7 @@ Stage 2 import monitoring now detects attacks that activate on module load rathe
 |-----|---------------|---------------------------|
 | Non-npm ecosystems | `fenceline install` monitors any command; `fenceline check` parses npm lockfiles only | Lockfile parsers for pip, cargo, yarn, pnpm |
 | CI/CD integration | [GitHub Action](../action/action.yml) is defined but not yet tested in production | End-to-end testing on real PRs |
-| Supply chain attacks via GitHub Actions | Not addressed | Action pinning verification tool |
+| Supply chain attacks via GitHub Actions | Partially addressed — `fenceline audit-actions` verifies SHA pinning | Runtime CI pipeline monitoring |
 
 ## Testing the Tools Against Simulations
 

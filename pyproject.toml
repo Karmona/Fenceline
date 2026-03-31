@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "fenceline"
 version = "0.5.0"
-description = "Supply chain security tools — create clarity in chaos"
+description = "Sandboxed package installs and supply chain security tools for npm and PyPI"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.9"
@@ -18,6 +18,11 @@ keywords = [
     "dependency",
     "network-monitor",
     "provenance",
+    "sandbox",
+    "docker",
+    "pip",
+    "malware-detection",
+    "install-monitoring",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

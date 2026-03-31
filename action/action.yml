@@ -9,12 +9,8 @@ inputs:
   lockfile:
     description: 'Path to lockfile (auto-detected if omitted)'
     required: false
-  scorecard:
-    description: 'Include OpenSSF Scorecard data'
-    required: false
-    default: 'false'
   fail-on:
-    description: 'Risk level that fails the check (critical, high, medium, low, none)'
+    description: '(Not yet implemented) Minimum risk level to fail the check'
     required: false
     default: 'high'
 
@@ -22,7 +18,7 @@ runs:
   using: 'composite'
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
       with:
         python-version: '3.12'
 
@@ -36,17 +32,12 @@ runs:
       shell: bash
       env:
         FENCELINE_LOCKFILE: ${{ inputs.lockfile }}
-        FENCELINE_SCORECARD: ${{ inputs.scorecard }}
         FENCELINE_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         ARGS="check --base-ref ${{ github.event.pull_request.base.sha }} --format markdown"
 
         if [ -n "$FENCELINE_LOCKFILE" ]; then
           ARGS="$ARGS --lockfile $FENCELINE_LOCKFILE"
-        fi
-
-        if [ "$FENCELINE_SCORECARD" = "true" ]; then
-          ARGS="$ARGS --scorecard"
         fi
 
         # Note: --fail-on is planned but not yet implemented in the CLI.

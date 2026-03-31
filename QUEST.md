@@ -9,7 +9,7 @@ Fenceline tracks its progress against real-world supply chain attacks. Every exp
 Based on analysis of 11 major supply chain attacks (2018-2026):
 
 ```
-Progress: ███████░░░ 7/11 attacks preventable with Docker sandbox
+Progress: ███████░░░░ 7/11 attacks preventable with Docker sandbox
 ```
 
 | # | Attack | Year | Sandbox Prevents It? |

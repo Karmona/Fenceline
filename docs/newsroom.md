@@ -18,6 +18,7 @@ Last updated: March 2026
 
 | Date | What shipped | Why it matters |
 |------|-------------|----------------|
+| Mar 2026 | Fenceline v0.5.0: Docker sandbox with 2-stage import monitoring | Sandboxed installs that block attacks phoning home during install or import |
 | Mar 2026 | npm `min-release-age` stabilizing in v11.x | One config line blocks most account takeover attacks |
 | Feb 2026 | npm deprecates classic tokens permanently | Forces migration to short-lived granular tokens or OIDC |
 | Dec 2025 | npm deprecates TOTP 2FA, pushes WebAuthn | TOTP can be phished in real-time (chalk/debug proved this) |

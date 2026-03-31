@@ -83,8 +83,9 @@ The sandbox is the core tool. These support it:
 
 ## Quick Start
 
-**No install needed — check your project's security posture:**
+**Quick posture check (clone the repo first):**
 ```bash
+cd Fenceline
 bash tools/quick-check.sh
 ```
 

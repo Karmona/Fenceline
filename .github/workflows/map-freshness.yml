@@ -9,7 +9,7 @@ jobs:
   check-freshness:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4
 
       - name: Check registry DNS
         id: dns
@@ -36,7 +36,7 @@ jobs:
           cat "$RUNNER_TEMP/dns-check.txt"
 
       - name: Create issue if certs expiring soon
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
             const fs = require('fs');
