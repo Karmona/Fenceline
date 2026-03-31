@@ -24,7 +24,7 @@ def run(args) -> int:
     """
     sandbox = getattr(args, 'sandbox', False)
 
-    cmd = args.command if hasattr(args, 'command') else args
+    cmd = args.install_cmd if hasattr(args, 'install_cmd') else args
     if not cmd:
         print("Usage: fenceline install [--sandbox] <command...>", file=sys.stderr)
         print("Example: fenceline install --sandbox npm install express", file=sys.stderr)

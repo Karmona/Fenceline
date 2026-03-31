@@ -162,6 +162,33 @@ class TestSandboxedInstall:
         alerts, code = sandbox.run(["npm", "install", "express"])
         assert code == 1
 
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_failed_docker_cp_returns_error(self, mock_run, _mock_docker):
+        """A failed docker cp must not report success (P2 fix)."""
+        def side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock(returncode=0, stderr=b"")
+            if cmd[0:2] == ["docker", "run"]:
+                result.stdout = "abc123container\n"
+            elif cmd[0:2] == ["docker", "wait"]:
+                result.stdout = "0\n"
+            elif cmd[0:2] == ["docker", "exec"]:
+                result.stdout = ""  # no connections = clean
+            elif cmd[0:2] == ["docker", "cp"]:
+                result.returncode = 1
+                result.stderr = b"no such container"
+            elif cmd[0:2] == ["docker", "rm"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        mock_run.side_effect = side_effect
+        sandbox = SandboxedInstall(self._make_deep_map())
+        alerts, code = sandbox.run(["npm", "install", "express"])
+        assert code == 1  # must fail, not silently succeed
+
 
 # --- ContainerMonitor ---
 

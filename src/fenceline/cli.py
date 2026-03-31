@@ -36,7 +36,7 @@ def _cmd_audit_actions(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="fenceline",
-        description="Supply chain security tools -- create clarity in chaos",
+        description="Dependency firewall for developer machines",
     )
     parser.add_argument(
         "--version", action="version", version=f"fenceline {__version__}"
@@ -50,26 +50,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    # -- check --
-    check_parser = subparsers.add_parser(
-        "check", help="Analyze supply chain security posture"
+    # -- wrap (hero workflow — listed first) --
+    wrap_parser = subparsers.add_parser(
+        "wrap",
+        help="Activate the dependency firewall — wraps npm/yarn/pnpm to sandbox installs",
     )
-    check_parser.add_argument(
-        "--lockfile", type=str, default=None, help="Path to lockfile"
+    wrap_parser.add_argument(
+        "--enable", action="store_true",
+        help="Install wrappers (npm install → sandboxed install)",
     )
-    check_parser.add_argument(
-        "--base-ref", type=str, default=None, help="Git ref to diff against"
+    wrap_parser.add_argument(
+        "--disable", action="store_true",
+        help="Remove wrappers (restore original commands)",
     )
-    check_parser.add_argument(
-        "--format",
-        choices=["text", "json", "markdown"],
-        default="text",
-        help="Output format",
+    wrap_parser.add_argument(
+        "--status", action="store_true",
+        help="Show which tools are currently wrapped",
     )
-    check_parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Verbose output"
-    )
-    check_parser.set_defaults(func=_cmd_check)
+    wrap_parser.set_defaults(func=_cmd_wrap)
 
     # -- install --
     install_parser = subparsers.add_parser(
@@ -91,11 +89,32 @@ def build_parser() -> argparse.ArgumentParser:
         "--verbose", "-v", action="store_true", help="Verbose output"
     )
     install_parser.add_argument(
-        "command",
+        "install_cmd",
         nargs=argparse.REMAINDER,
-        help="Command to run (e.g., npm install)",
+        help="Command to run (e.g., npm install express)",
     )
     install_parser.set_defaults(func=_cmd_install)
+
+    # -- check --
+    check_parser = subparsers.add_parser(
+        "check", help="Analyze supply chain security posture"
+    )
+    check_parser.add_argument(
+        "--lockfile", type=str, default=None, help="Path to lockfile"
+    )
+    check_parser.add_argument(
+        "--base-ref", type=str, default=None, help="Git ref to diff against"
+    )
+    check_parser.add_argument(
+        "--format",
+        choices=["text", "json", "markdown"],
+        default="text",
+        help="Output format",
+    )
+    check_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Verbose output"
+    )
+    check_parser.set_defaults(func=_cmd_check)
 
     # -- init --
     init_parser = subparsers.add_parser(
@@ -121,25 +140,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--verbose", "-v", action="store_true", help="Show all findings including skipped"
     )
     audit_actions_parser.set_defaults(func=_cmd_audit_actions)
-
-    # -- wrap --
-    wrap_parser = subparsers.add_parser(
-        "wrap",
-        help="Install shell wrappers so npm/yarn/pnpm automatically use the sandbox",
-    )
-    wrap_parser.add_argument(
-        "--enable", action="store_true",
-        help="Install wrappers (npm install → sandboxed install)",
-    )
-    wrap_parser.add_argument(
-        "--disable", action="store_true",
-        help="Remove wrappers (restore original commands)",
-    )
-    wrap_parser.add_argument(
-        "--status", action="store_true",
-        help="Show which tools are currently wrapped",
-    )
-    wrap_parser.set_defaults(func=_cmd_wrap)
 
     return parser
 

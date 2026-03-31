@@ -470,7 +470,11 @@ class SandboxedInstall:
         print(f"[fenceline] Sandbox: install clean. Copying artifacts to host...")
         artifact_path = _ARTIFACT_PATHS.get(tool_id)
         if artifact_path:
-            self._copy_artifacts(artifact_path, Path.cwd())
+            if not self._copy_artifacts(artifact_path, Path.cwd()):
+                print("[fenceline] Error: sandbox verified clean, but failed to copy "
+                      "artifacts to host.", file=sys.stderr)
+                self._kill_container()
+                return alerts, 1
 
         self._kill_container()
         print(f"[fenceline] Sandbox: done. Install verified and applied.")
@@ -488,18 +492,30 @@ class SandboxedInstall:
                 f"— {alert.reason}"
             )
 
-    def _copy_artifacts(self, container_path: str, host_dir: Path) -> None:
-        """Copy install artifacts from container to host."""
+    def _copy_artifacts(self, container_path: str, host_dir: Path) -> bool:
+        """Copy install artifacts from container to host.
+
+        Returns True if artifacts were copied successfully, False otherwise.
+        """
         dest = str(host_dir) + "/"
         try:
-            subprocess.run(
+            result = subprocess.run(
                 [_docker(), "cp", f"{self._container_id}:{container_path}", dest],
                 capture_output=True,
                 timeout=60,
             )
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", errors="replace").strip()
+                print(f"[fenceline] Error: docker cp failed (exit {result.returncode})",
+                      file=sys.stderr)
+                if stderr:
+                    print(f"[fenceline]   {stderr}", file=sys.stderr)
+                return False
+            return True
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            print("[fenceline] Warning: failed to copy artifacts from container",
+            print("[fenceline] Error: failed to copy artifacts from container",
                   file=sys.stderr)
+            return False
 
     def _kill_container(self) -> None:
         """Remove the container."""

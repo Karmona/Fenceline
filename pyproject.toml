@@ -5,24 +5,24 @@ build-backend = "hatchling.build"
 [project]
 name = "fenceline"
 version = "0.5.0"
-description = "Sandboxed package installs and supply chain security tools for npm and PyPI"
+description = "Dependency firewall for developer machines — sandboxed install verification for npm and Node.js"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.9"
 dependencies = ["pyyaml>=6.0"]
 keywords = [
+    "dependency-firewall",
     "supply-chain",
     "security",
     "npm",
-    "lockfile",
-    "dependency",
-    "network-monitor",
-    "provenance",
     "sandbox",
     "docker",
-    "pip",
+    "network-monitor",
     "malware-detection",
     "install-monitoring",
+    "lockfile",
+    "dependency",
+    "provenance",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
