@@ -1,15 +1,14 @@
-# Fenceline Testing Simulations
+# Fenceline Testing
 
-Safe, localhost-only simulations of real supply chain attack patterns. These tests help validate that detection tools can identify malicious behavior without using real malware or connecting to external servers.
+Safe, localhost-only simulations of real supply chain attack patterns, plus documentation of what our tools detect and where the gaps are.
 
 ## Safety Guarantees
 
 - **All simulations use localhost only** — no connections leave your machine
 - **No real malware** — each test simulates the network pattern of a known attack, not the payload
 - **Safe to run on any development machine** — nothing is installed, modified, or persisted
-- **Idempotent** — each test cleans up after itself
 
-## What's Tested
+## Attack Simulations
 
 Each simulation recreates the network behavior of a documented supply chain attack:
 
@@ -21,43 +20,115 @@ Each simulation recreates the network behavior of a documented supply chain atta
 | `test-dns-exfil.sh` | DNS-based data exfiltration | Various |
 | `test-child-process.sh` | Child process spawning outbound connections | Nx (node -> curl -> C2) |
 
-## Running Tests
-
-Run individual tests:
+### Running Simulations
 
 ```bash
-cd testing/simulations
-./test-outbound-exfil.sh
+cd testing && ./harness.sh
 ```
 
-Run all tests with the harness:
+## What Our Tools Detect
 
+Here's how `fenceline check` and `fenceline install` perform against each attack pattern:
+
+### `fenceline check` (lockfile diff scanner)
+
+Scans lockfile changes and queries npm registry. Catches risks **before install**.
+
+| Signal | What it catches | Real attacks this would flag |
+|--------|----------------|------------------------------|
+| Package age < 7 days | Newly published malicious versions | Axios RAT (published hours before detection) |
+| Maintainer change | Account takeover, handoff attacks | event-stream (new maintainer), chalk/debug (phished account) |
+| postinstall/preinstall script | Primary attack execution vector | ua-parser-js, Nx, Axios RAT |
+| Missing provenance | Package not built via trusted CI | Axios (missing Sigstore attestation) |
+| New dependency added | Unexpected additions to dependency tree | event-stream added flatmap-stream |
+
+**Example output** (tested on real npm project adding axios):
+```
+[!] HIGH     ( 55) axios  (new) -> 1.14.0
+         +30  very_new_version: Published 3d ago (< 7 days)
+         +10  maintainer_added: New maintainers detected
+         +10  no_provenance: No Sigstore provenance attestation
+         + 5  new_package: Newly added dependency
+```
+
+### `fenceline install` (network monitor)
+
+Monitors outbound connections during `npm install`, scoped to the install process. Catches anomalies **during install**.
+
+| Signal | What it catches | Real attacks this would flag |
+|--------|----------------|------------------------------|
+| Connection to unknown IP | IP outside known CDN ranges | Codecov (178.62.86.114), Axios (142.11.206.73) |
+| Non-443 port | Unusual port during install | Ultralytics (port 8080), Axios (port 8000), ua-parser-js (mining ports) |
+| Wrong CDN for tool | npm connecting via non-Cloudflare IP | DNS poisoning, CDN hijack |
+
+**Example output** (tested with `fenceline install npm install is-even`):
+```
+[fenceline] 1 network alert(s) during install:
+  ? [WARNING] node -> 2606:4700::6810:722:443 — Unknown IP, not in known CDN ranges
+```
+
+## What We Don't Catch Yet (Known Gaps)
+
+These are the attack patterns our tools cannot currently detect. Each gap is a target for future development.
+
+### Gaps in `fenceline check`
+
+| Gap | Why | Real attack example | What's needed |
+|-----|-----|---------------------|---------------|
+| Runtime malicious code (no install scripts) | We only check metadata, not package source code | chalk/debug (injected into source, no postinstall) | Source code analysis (Phase 4) |
+| Typosquatting | We don't compare package names against known packages | Various npm typosquats | Package name similarity scoring |
+| Slopsquatting | We don't check if a package name was AI-hallucinated | Emerging 2025+ | Registry existence + popularity check |
+
+### Gaps in `fenceline install`
+
+| Gap | Why | Real attack example | What's needed |
+|-----|-----|---------------------|---------------|
+| IPv6 CDN ranges | Our map only has IPv4 CIDR ranges | False positive on Cloudflare IPv6 | Add IPv6 ranges to map |
+| Domain reuse for exfiltration | Nx used `api.github.com` (a legitimate domain) for data theft | Nx/s1ngularity | HTTP method/path behavioral analysis (Phase 3) |
+| No-network attacks | Logic bombs, sabotage with no outbound connections | colors.js/faker.js, XZ Utils | Code analysis, not network monitoring |
+| Very short-lived connections | Polling every 500ms can miss sub-500ms connections | Theoretical | eBPF or dtrace for kernel-level capture |
+| DNS exfiltration | Data encoded in DNS queries (long subdomains) | Various | DNS query monitoring |
+
+### Gaps in both tools
+
+| Gap | Why | What's needed |
+|-----|-----|---------------|
+| Non-npm ecosystems | Only npm is fully supported | Extend lockfile parser for pip, cargo, yarn, pnpm |
+| CI/CD pipeline attacks | Tools run locally, not in CI | GitHub Action (action.yml is ready, needs testing) |
+| Supply chain attacks via GitHub Actions | Compromised actions, not packages | Action pinning verification |
+
+## Testing the Tools Against Simulations
+
+You can manually test our tools against the attack simulations:
+
+**Test `fenceline install` catches outbound exfiltration:**
 ```bash
-./harness.sh
+# Terminal 1: start mock C2 server
+python3 -m http.server 9999 &
+
+# Terminal 2: run fenceline install with a command that phones home
+fenceline install node -e "fetch('http://localhost:9999/exfil')"
+
+# Expected: alert about non-443 port connection to localhost
 ```
 
-The harness generates a summary report in `reports/`.
+**Test `fenceline check` catches risky packages:**
+```bash
+# In any npm project:
+npm install some-new-package
+fenceline check --base-ref HEAD
 
-## How to Read Results
+# Expected: risk report showing package age, maintainers, scripts
+```
 
-Each test prints three sections:
-
-1. **SETUP** — What the test is configuring (localhost servers, mock processes)
-2. **SIMULATION** — The actual attack pattern being executed
-3. **DETECTION POINTS** — What a detector should have caught, with specific indicators
-
-A detection tool should flag every item listed in DETECTION POINTS. If it misses any, that's a gap.
-
-## Writing New Simulations
-
-Follow the existing pattern:
+## Contributing New Tests
 
 1. Name the file `test-<pattern>.sh`
-2. Document which real attack it simulates in the header comment
-3. Use only localhost (127.0.0.1) for all network activity
-4. Clean up all spawned processes in a trap handler
-5. Print clear DETECTION POINTS at the end
+2. Document which real attack it simulates
+3. Use only localhost for all network activity
+4. Add a row to the detection matrix above showing what tools should catch it
+5. Note any gaps in the "What We Don't Catch" section
 
 ## License
 
-Apache 2.0 — see [LICENSE](../LICENSE) in the project root.
+Apache 2.0 — see [LICENSE](../LICENSE).
