@@ -64,19 +64,19 @@ An attacker acquires control of a domain that existing code references — eithe
 
 These are concrete steps you can take today. None require special tools or paid services.
 
-Start by making sure you're on a recent version of your package manager — the security features below require it:
+Start by making sure you're on npm v11+ — the cooldown and provenance features below require it:
 
-Check your current version:
 ```bash
 npm --version
 ```
 
-Update to latest:
+If you're below v11, update to a specific verified version (not `@latest` — this is a supply chain security guide, after all):
+
 ```bash
-npm install -g npm@latest
+npm install -g npm@11.12.1
 ```
 
-The steps below assume npm v11+ (or pnpm v10.16+ / Yarn v4.10+). If you can't update, skip to step 2 — the other steps work on any version.
+Verify the version after install. If you can't update, skip to step 2 — the other steps work on any version.
 
 ### 1. Enforce a minimum package age (cooldown)
 
