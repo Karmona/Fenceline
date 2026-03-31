@@ -54,13 +54,12 @@ A comprehensive directory of every supply chain security tool we know about — 
 
 - [Tools Landscape](docs/landscape.md) — the full map of existing defenses
 
-## The Quest
+### Stay Current
 
-We track our progress against real attacks. See [QUEST.md](QUEST.md) for the current scoreboard.
+Supply chain security moves fast. New attacks, new defenses, new package manager features.
 
-```
-Progress: ██████░░░░ 7/10 major attacks detectable
-```
+- [Newsroom](docs/newsroom.md) — latest incidents, defenses, and package manager security updates
+- [QUEST.md](QUEST.md) — what we're working on and where we think the gaps are
 
 ## Quick Start
 

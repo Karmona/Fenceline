@@ -216,9 +216,37 @@ fi
 echo ""
 
 # ============================================
-# 6. HOMEBREW TELEMETRY
+# 6. NPM TOKENS + TRUSTED PUBLISHING
 # ============================================
-echo -e "${BOLD}6. Homebrew telemetry${NC}"
+echo -e "${BOLD}6. npm tokens and publishing security${NC}"
+echo "   Old or leaked tokens are the #1 way attackers publish malicious packages."
+echo "   npm recommends trusted publishing (OIDC) instead of long-lived tokens."
+echo ""
+
+if command -v npm >/dev/null 2>&1; then
+    NPM_USER=$(npm whoami 2>/dev/null || echo "")
+    if [ -n "$NPM_USER" ]; then
+        TOKEN_COUNT=$(npm token list 2>/dev/null | grep -c "token" || echo "0")
+        if [ "$TOKEN_COUNT" -gt 0 ] 2>/dev/null; then
+            warn "$TOKEN_COUNT npm token(s) found — review and revoke any you don't need"
+            echo "        Run: npm token list"
+            echo "        Revoke unused: npm token revoke <token-id>"
+            echo "        Better: switch to trusted publishing (OIDC): https://docs.npmjs.com/trusted-publishers/"
+        else
+            pass "No long-lived npm tokens found"
+        fi
+    else
+        skip "Not logged into npm"
+    fi
+else
+    skip "npm not installed"
+fi
+echo ""
+
+# ============================================
+# 7. HOMEBREW TELEMETRY
+# ============================================
+echo -e "${BOLD}7. Homebrew telemetry${NC}"
 echo "   Homebrew is the ONLY major package manager that sends analytics."
 echo "   Every other tool (npm, pip, cargo, yarn, Go, RubyGems) sends zero."
 echo ""
@@ -236,9 +264,9 @@ fi
 echo ""
 
 # ============================================
-# 7. BONUS: .gitignore check
+# 8. BONUS: .gitignore check
 # ============================================
-echo -e "${BOLD}7. Sensitive file protection${NC}"
+echo -e "${BOLD}8. Sensitive file protection${NC}"
 echo "   .env files, credentials, and tokens should never be committed."
 echo ""
 

@@ -146,13 +146,33 @@ npm audit signatures
 
 If a package has provenance, you can verify it was not tampered with between the source repository and the registry.
 
-### Bonus: Disable Homebrew telemetry
+### 6. Disable Homebrew telemetry
 
 Homebrew is the **only** major package manager that sends analytics data (to InfluxDB in AWS Frankfurt). Every other tool -- npm, pip, cargo, yarn, Go modules, RubyGems -- sends zero telemetry.
 
 ```bash
 brew analytics off && echo 'export HOMEBREW_NO_ANALYTICS=1' >> ~/.zshrc
 ```
+
+### If You Publish Packages
+
+If you maintain npm packages, these extra steps protect your users from account takeover attacks like chalk/debug and axios:
+
+**Use trusted publishing instead of tokens** — npm now supports OIDC publishing from GitHub Actions. No long-lived tokens to steal:
+```bash
+npm config set provenance true
+```
+
+Then configure trusted publishing in your npm account settings. See [npm trusted publishing docs](https://docs.npmjs.com/trusted-publishers/).
+
+**Switch from TOTP to hardware keys** — npm is deprecating TOTP 2FA because it can be phished in real-time (as the chalk/debug attack proved). Switch to WebAuthn/FIDO2 at [npmjs.com/settings](https://www.npmjs.com/settings).
+
+**Remove old tokens** — list and revoke any tokens you no longer use:
+```bash
+npm token list
+```
+
+See npm's full security guidance: [OpenJS Foundation: Publishing Securely on npm](https://openjsf.org/blog/publishing-securely-on-npm) | [npm's plan for a more secure supply chain](https://github.blog/security/supply-chain-security/our-plan-for-a-more-secure-npm-supply-chain/)
 
 ## Quick Posture Report
 
@@ -174,13 +194,16 @@ echo "=== Supply Chain Posture Report ===" && echo "" \
 && echo "--- Provenance ---" \
 && (npm audit signatures 2>/dev/null | head -3 || echo "SKIP: No npm project or npm not available") \
 && echo "" \
+&& echo "--- npm tokens ---" \
+&& (npm token list 2>/dev/null | head -5 || echo "SKIP: Not logged in") \
+&& echo "" \
 && echo "--- Homebrew telemetry ---" \
 && (brew analytics 2>/dev/null | head -1 || echo "SKIP: Homebrew not installed") \
 && echo "" \
 && echo "--- Sensitive files ---" \
 && (grep -q "\.env" .gitignore 2>/dev/null && echo "PASS: .env in .gitignore" || echo "WARN: .env not in .gitignore") \
 && echo "" \
-&& echo "=== Done ==="
+&& echo "=== Done. More: https://github.com/Karmona/Fenceline ==="
 ```
 
 For a more detailed report with color-coded output and fix instructions, use our full check script:
@@ -189,9 +212,10 @@ For a more detailed report with color-coded output and fix instructions, use our
 curl -sL https://raw.githubusercontent.com/Karmona/Fenceline/main/tools/quick-check.sh | bash
 ```
 
-The script checks: cooldown settings, install script protection, lockfile tracking, registry auth, package provenance, Homebrew telemetry, and sensitive file protection. It produces a pass/fail report with specific fix instructions.
-
 ## Where to Learn More
 
-- **[Exploit analyses](../exploits/)** -- Detailed breakdowns of real supply chain attacks, how they worked, how they were detected, and what defenses existed
-- **[Security tool landscape](landscape.md)** -- Comprehensive directory of every known supply chain security tool, what it catches, and what it misses
+- **[Newsroom](newsroom.md)** -- Latest incidents, new defenses, and package manager security updates
+- **[Exploit analyses](../exploits/)** -- Detailed breakdowns of real supply chain attacks
+- **[Security tool landscape](landscape.md)** -- Every known supply chain security tool, what it catches and misses
+- **[npm security roadmap](https://github.blog/security/supply-chain-security/our-plan-for-a-more-secure-npm-supply-chain/)** -- npm's official hardening plan
+- **[OpenJS: Publishing securely on npm](https://openjsf.org/blog/publishing-securely-on-npm)** -- Official guidance for package publishers
