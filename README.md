@@ -16,6 +16,12 @@ Most developers have no idea what their dependencies do at the network level. Su
 
 **Fenceline exists to change that.**
 
+## Start Here
+
+**[5-Minute Security Checklist](docs/supply-chain-for-dummies.md#5-minute-checklist-what-you-can-do-right-now)** — copy-paste commands to harden your project right now. No installs needed.
+
+**[Quick Posture Report](docs/supply-chain-for-dummies.md#quick-posture-report)** — one command that checks your project and tells you what to fix.
+
 ## What's Here
 
 ### Learn
