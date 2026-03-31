@@ -68,21 +68,17 @@ These are concrete steps you can take today. None require special tools or paid 
 
 Package managers now support delaying installation of newly published versions. This gives the community time to spot and report malicious releases before they reach your machine. Most supply chain attacks are detected within days.
 
-**pnpm** (v10.16+) -- add to your `pnpm-workspace.yaml` or `.npmrc`:
-```
-minimumReleaseAge=10080
-```
-This sets a 7-day cooldown (value is in minutes: 10080 = 7 days).
+Pick your package manager and run one command (sets a 7-day cooldown, value in minutes):
 
-**npm** (latest versions) -- add to your `.npmrc`:
-```
-minimum-release-age=10080
-```
-Note: this feature is relatively new in npm. Check `npm config list` to confirm your version supports it. If you get an error, update npm first: `npm install -g npm@latest`.
+```bash
+# pnpm (v10.16+)
+pnpm config set minimumReleaseAge 10080
 
-**Yarn** (v4.10+) -- add to `.yarnrc.yml`:
-```yaml
-npmMinimalAgeGate: 10080
+# npm (latest — run 'npm install -g npm@latest' first if needed)
+npm config set minimum-release-age 10080
+
+# Yarn (v4.10+) — add to .yarnrc.yml:
+# npmMinimalAgeGate: 10080
 ```
 
 ### 2. Disable install scripts for untrusted packages
