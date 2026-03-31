@@ -179,8 +179,8 @@ class ContainerMonitor:
                     alert = check_connection(conn, self._deep_map, self._tool_id)
                     if alert is not None:
                         self._alerts.append(alert)
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[fenceline] Warning: container monitor error: {exc}", file=sys.stderr)
 
             time.sleep(self._poll_interval)
 

@@ -30,18 +30,36 @@ REAL_CMD="{real_path}"
 FENCELINE_CMD="{fenceline_path}"
 
 # Check if this is an install command
+# Match: install, add, i, ci (npm ci)
+# Only match as the FIRST non-flag argument to avoid false positives like "npm run add"
 IS_INSTALL=false
+FOUND_VERB=false
 for arg in "$@"; do
     case "$arg" in
-        install|add|i) IS_INSTALL=true; break;;
+        -*) continue;;  # skip flags
+        install|add|i|ci)
+            if [ "$FOUND_VERB" = false ]; then
+                IS_INSTALL=true
+            fi
+            break;;
+        *)
+            FOUND_VERB=true
+            break;;
     esac
 done
 
-if [ "$IS_INSTALL" = true ] && command -v docker >/dev/null 2>&1; then
-    # Route through sandbox
-    exec "$FENCELINE_CMD" install --sandbox "$(basename "$0")" "$@"
+if [ "$IS_INSTALL" = true ]; then
+    if command -v docker >/dev/null 2>&1; then
+        # Route through sandbox
+        exec "$FENCELINE_CMD" install --sandbox "$(basename "$0")" "$@"
+    else
+        # FAIL CLOSED: Docker not available, block the install
+        echo "[fenceline] BLOCKED: Docker is not running. Cannot sandbox this install." >&2
+        echo "[fenceline] Start Docker, or run the real command directly: $REAL_CMD $*" >&2
+        exit 1
+    fi
 else
-    # Pass through to real command
+    # Non-install commands pass through unchanged
     exec "$REAL_CMD" "$@"
 fi
 '''
