@@ -64,6 +64,21 @@ An attacker acquires control of a domain that existing code references — eithe
 
 These are concrete steps you can take today. None require special tools or paid services.
 
+Start by making sure you're on a recent version of your package manager — the security features below require it:
+
+```bash
+# Check your current version
+npm --version
+
+# Update npm to latest (needed for cooldown + provenance features)
+npm install -g npm@latest
+
+# Verify
+npm --version
+```
+
+The steps below assume npm v11+ (or pnpm v10.16+ / Yarn v4.10+). If you can't update, skip to step 2 — the other steps work on any version.
+
 ### 1. Enforce a minimum package age (cooldown)
 
 Package managers now support delaying installation of newly published versions. This gives the community time to spot and report malicious releases before they reach your machine. Most supply chain attacks are detected within days.
@@ -74,7 +89,7 @@ Pick your package manager and run one command (sets a 7-day cooldown, value in m
 # pnpm (v10.16+)
 pnpm config set minimumReleaseAge 10080
 
-# npm (latest — run 'npm install -g npm@latest' first if needed)
+# npm (v11+)
 npm config set minimum-release-age 10080
 
 # Yarn (v4.10+) — add to .yarnrc.yml:
