@@ -6,10 +6,10 @@ Practical supply chain security steps organized by what you do. Each section is 
 
 ## If You Use npm/Node.js
 
-**Require a cooldown on new package versions** (blocks packages published in the last 3 days):
+**Require a cooldown on new package versions** (blocks packages published in the last 7 days):
 
 ```bash
-npm config set min-release-age 3
+npm config set min-release-age 7
 ```
 
 **Disable install scripts globally** (prevents postinstall malware):
@@ -255,6 +255,6 @@ git log --oneline --all -- requirements.txt
 ## Further Reading
 
 - [Supply Chain for Developers](supply-chain-for-dummies.md) -- the full plain-English explainer
-- [Exploit Case Studies](../exploits/) -- 10 real attacks analyzed in detail
+- [Exploit Case Studies](../exploits/) -- 11 real attacks analyzed in detail
 - [Tools Landscape](landscape.md) -- every supply chain security tool we know about
 - [Why This Matters](why-this-matters.md) -- the real cost, with real numbers

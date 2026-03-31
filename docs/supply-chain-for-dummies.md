@@ -78,6 +78,16 @@ npm install -g npm@11.12.1
 
 Verify the version after install. If you can't update, skip to step 2 — the other steps work on any version.
 
+### Use sandboxed installs for new packages
+
+If you have Docker installed, run package installs through Fenceline's sandbox:
+
+```bash
+fenceline install --sandbox npm install <new-package>
+```
+
+The install runs inside a Docker container. Network connections are monitored. If anything suspicious is detected, the container is killed and nothing touches your machine. If clean, the installed packages are copied to your project.
+
 ### 1. Enforce a minimum package age (cooldown)
 
 Package managers now support delaying installation of newly published versions. This gives the community time to spot and report malicious releases before they reach your machine. Most supply chain attacks are detected within days.

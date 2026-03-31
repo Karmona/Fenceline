@@ -8,6 +8,8 @@ Supply chain attacks work because no one knows what "normal" looks like. If you 
 
 The deep map fixes this. It gives you a machine-readable baseline to build detection rules against.
 
+This data powers the detection engine in `fenceline install --sandbox`. When a package install makes a network connection, the sandbox checks it against this map to determine if the destination is expected.
+
 ## How It's Built
 
 Every entry is derived from **public data only**:

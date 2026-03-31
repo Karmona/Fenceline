@@ -36,7 +36,7 @@ Here's how `fenceline check` and `fenceline install --sandbox` perform against e
 |--------|----------------------|----------------------------------|----------------------|
 | event-stream | YES (metadata signals) | YES (Stage 2 catches import payload) | Sandbox isolates damage |
 | ua-parser-js | YES (postinstall script) | YES (Stage 1 catches outbound) | Container killed on alert |
-| Codecov | YES (unknown IP) | YES (Stage 1 catches unknown IP) | Container killed on alert |
+| Codecov | Outside scope | Outside scope | Outside scope (CI/CD tool, not a package install) |
 | colors.js/faker.js | NO (no network) | NO (no network) | Sandbox limits blast radius to container |
 | XZ Utils | NO (passive backdoor) | NO (passive backdoor) | Sandbox limits blast radius to container |
 | Ultralytics | YES (non-443 port) | YES (Stage 1 catches mining port) | Container killed on alert |
@@ -45,6 +45,8 @@ Here's how `fenceline check` and `fenceline install --sandbox` perform against e
 | Axios RAT | YES (unknown IP + port) | YES (Stage 1 catches outbound) | Container killed on alert |
 | TeamPCP: LiteLLM | NO (.pth file) | YES (Stage 2 triggers .pth on import) | Container killed on alert |
 | TeamPCP: Telnyx | NO (steganographic) | NO (steganographic) | Sandbox limits blast radius to container |
+
+**Note:** Codecov and Polyfill.io are outside Fenceline's scope -- they are not package installs. Codecov was a CI/CD bash script compromise, and Polyfill.io was a client-side CDN domain takeover. You would never run `fenceline install --sandbox` on these.
 
 ### Detailed Tool Breakdown
 

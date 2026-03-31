@@ -33,13 +33,14 @@ This is a community-maintained project. We aim to:
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.x   | Yes       |
-| < 0.2   | No        |
+| 0.4.x+  | Yes       |
+| < 0.4   | No        |
 
 ## Scope
 
-Fenceline is a detection and educational tool. It does not handle secrets, credentials, or sensitive data. The primary attack surface is:
+Fenceline is a detection, prevention, and educational tool. It does not handle secrets, credentials, or sensitive data. The primary attack surface is:
 
 - The `fenceline install` command runs `lsof`/`ss` via subprocess
-- The `fenceline check` command makes HTTP requests to `registry.npmjs.org`
+- The `fenceline install --sandbox` command runs Docker containers, executes commands inside them via `docker exec`, and copies files from containers to the host via `docker cp`
+- The `fenceline check` command makes HTTP requests to `registry.npmjs.org` and `pypi.org`
 - The testing simulations run localhost-only network operations

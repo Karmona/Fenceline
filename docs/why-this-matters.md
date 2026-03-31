@@ -43,6 +43,8 @@ These are not fringe packages. These are foundational infrastructure that most m
 
 **Community-driven.** Supply chain security knowledge should not be locked behind enterprise paywalls. Fenceline is Apache 2.0 licensed. Every exploit analysis, every detection technique, every infrastructure map is public and contributed by the community.
 
+**Sandboxed installs** — Package installs run inside Docker containers, monitored from outside. Suspicious connections kill the container before anything touches your machine. Two-stage monitoring covers both install-time and import-time payloads.
+
 **Combines multiple approaches.** Rather than betting on a single detection method, Fenceline aims to layer static analysis, behavioral analysis, metadata scoring, infrastructure verification, and community intelligence. No single signal is reliable alone. Multiple weak signals combined produce strong detection.
 
 ## The Gap Is Clear

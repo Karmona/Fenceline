@@ -141,7 +141,7 @@ fenceline install --sandbox npm install <pkg>
 
 Network monitoring happens from **outside** the container via `docker exec ss`. The container is disposable. Your machine is never exposed to untrusted code until it has been verified.
 
-Without Docker, `fenceline install` still works in observational mode -- it monitors connections but cannot prevent execution.
+Without Docker, `fenceline install` still works with host-based monitoring (without Docker) -- it monitors connections but cannot prevent execution.
 
 ## Detection Scorecard
 
@@ -169,7 +169,7 @@ Based on our analysis of 11 real supply chain attacks, here's what the sandbox a
 Exploit case studies, deep map, explainers, playbook, landscape, newsroom, posture check, test harness.
 
 ### Phase 2: CLI Tools `done`
-`fenceline check`, `install`, `init`, `audit-actions`. 62 automated tests. CI on every push.
+`fenceline check`, `install`, `init`, `audit-actions`. 83 automated tests. CI on every push.
 
 ### Phase 3: Harden + Grow `in progress`
 GitHub Action definition (done). PyPI distribution, OpenSSF Scorecard integration, behavioral HTTP analysis, plugin system (planned).

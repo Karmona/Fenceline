@@ -6,7 +6,7 @@ Thank you for your interest in contributing. Every contribution helps make the s
 
 ### Documentation (Highest Impact)
 
-The documentation IS the product. Improvements here help the most people:
+The documentation IS the product. The Docker sandbox is the core defense tool; documentation makes it accessible. Improvements here help the most people:
 
 - **Fix errors** — typos, outdated information, broken links
 - **Improve clarity** — if something is confusing, make it clearer
@@ -32,6 +32,7 @@ The documentation IS the product. Improvements here help the most people:
 - **Build new plugins** — detection signals we haven't implemented
 - **Improve existing tools** — better accuracy, fewer false positives
 - **Port to new platforms** — Linux, Windows support
+- **Improve sandbox detection** — new ecosystem support, file system diffing, HTTP analysis
 - **Add tests** — new attack pattern simulations
 
 ## How to Submit

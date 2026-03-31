@@ -20,7 +20,7 @@ def run(args) -> int:
     If --sandbox is set, runs the install inside a Docker container
     and only copies artifacts to the host if no suspicious network
     activity is detected. Otherwise, monitors on the host machine
-    (observational only — code executes before alerts fire).
+    (host-based monitoring only — code executes before alerts fire).
     """
     sandbox = getattr(args, 'sandbox', False)
 
@@ -66,7 +66,7 @@ def _run_sandboxed(cmd: list[str], monitor_time: int = 60) -> int:
 
 
 def _run_host(cmd: list[str]) -> int:
-    """Run install on host with network monitoring (observational only)."""
+    """Run install on host with network monitoring (host-based monitoring, without Docker)."""
     command_name = cmd[0]
     supported = {"npm", "pip", "pip3", "yarn", "pnpm", "cargo", "brew"}
     if command_name not in supported:

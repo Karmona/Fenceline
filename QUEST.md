@@ -16,10 +16,10 @@ Progress: ███████░░░ 7/11 attacks preventable with Docker sa
 |---|--------|------|---------------------|
 | 1 | event-stream | 2018 | YES (Stage 2 catches import payload) |
 | 2 | ua-parser-js | 2021 | YES (Stage 1 catches outbound) |
-| 3 | Codecov | 2021 | YES (Stage 1 catches unknown IP) |
+| 3 | Codecov | 2021 | Outside scope (CI/CD tool) |
 | 4 | colors.js/faker.js | 2022 | NO (no network) — sandbox limits blast radius |
 | 5 | XZ Utils | 2024 | NO (passive backdoor) — sandbox limits blast radius |
-| 6 | Polyfill.io | 2024 | PARTIAL |
+| 6 | Polyfill.io | 2024 | Outside scope (client-side CDN) |
 | 7 | Ultralytics | 2024 | YES (Stage 1 catches mining port) |
 | 8 | Nx/s1ngularity | 2025 | PARTIAL (legitimate domain) — sandbox isolates exfil |
 | 9 | chalk/debug | 2025 | YES (Stage 2 catches import payload) |
