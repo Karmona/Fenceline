@@ -82,7 +82,7 @@ The steps below assume npm v11+ (or pnpm v10.16+ / Yarn v4.10+). If you can't up
 
 Package managers now support delaying installation of newly published versions. This gives the community time to spot and report malicious releases before they reach your machine. Most supply chain attacks are detected within days.
 
-Pick your package manager and run one command (sets a 7-day cooldown, value in minutes):
+Pick your package manager and run one command to set a 7-day cooldown:
 
 **npm** (v11.10+) — value is in **days**:
 ```bash
@@ -118,38 +118,10 @@ Your `package-lock.json` or `yarn.lock` records the exact versions and integrity
 - Version jumps in packages not mentioned in the PR
 - Changed integrity hashes without version changes
 
-You can automate this with a simple script. Save this as `check-lockfile.sh` and run it after `git pull` or in CI:
+Quick one-liner to see what changed in your lockfile since last commit:
 
 ```bash
-#!/bin/bash
-# Show what changed in your lockfile since the last commit
-LOCKFILE=""
-if [ -f "package-lock.json" ]; then LOCKFILE="package-lock.json"; fi
-if [ -f "yarn.lock" ]; then LOCKFILE="yarn.lock"; fi
-if [ -f "pnpm-lock.yaml" ]; then LOCKFILE="pnpm-lock.yaml"; fi
-
-if [ -z "$LOCKFILE" ]; then
-  echo "No lockfile found."
-  exit 0
-fi
-
-echo "=== Lockfile changes in $LOCKFILE ==="
-
-# Show new packages added
-echo ""
-echo "NEW PACKAGES ADDED:"
-git diff HEAD~1 -- "$LOCKFILE" | grep "^+" | grep -E '"resolved"|"integrity"' | head -20
-
-# Show removed packages
-echo ""
-echo "PACKAGES REMOVED:"
-git diff HEAD~1 -- "$LOCKFILE" | grep "^-" | grep -E '"resolved"|"integrity"' | head -20
-
-# Count total changes
-ADDED=$(git diff HEAD~1 -- "$LOCKFILE" | grep "^+" | wc -l)
-REMOVED=$(git diff HEAD~1 -- "$LOCKFILE" | grep "^-" | wc -l)
-echo ""
-echo "Summary: +$ADDED lines / -$REMOVED lines changed in $LOCKFILE"
+git diff HEAD~1 -- package-lock.json yarn.lock pnpm-lock.yaml 2>/dev/null | grep "^[+-]" | grep -E "resolved|integrity|version" | head -30
 ```
 
 ### 4. Enable 2FA on your npm/PyPI account
@@ -157,11 +129,10 @@ echo "Summary: +$ADDED lines / -$REMOVED lines changed in $LOCKFILE"
 If you publish packages, enable two-factor authentication on your registry account. This is the single most effective defense against account takeover — the most common supply chain attack vector.
 
 ```bash
-# npm (must be logged in first with 'npm login')
 npm profile enable-2fa auth-and-writes
 ```
 
-For PyPI: go to https://pypi.org/manage/account/ > Add 2FA.
+You must be logged in first (`npm login`). For PyPI: go to https://pypi.org/manage/account/ > Add 2FA.
 
 Best practice: use hardware keys (WebAuthn/FIDO2) instead of TOTP apps — TOTP codes can be phished in real-time, as the chalk/debug attack showed.
 
@@ -180,13 +151,7 @@ If a package has provenance, you can verify it was not tampered with between the
 Homebrew is the **only** major package manager that sends analytics data (to InfluxDB in AWS Frankfurt). Every other tool -- npm, pip, cargo, yarn, Go modules, RubyGems -- sends zero telemetry.
 
 ```bash
-brew analytics off
-```
-
-To make it permanent, add this to your `~/.zshrc` or `~/.bashrc`:
-
-```bash
-export HOMEBREW_NO_ANALYTICS=1
+brew analytics off && echo 'export HOMEBREW_NO_ANALYTICS=1' >> ~/.zshrc
 ```
 
 ## Quick Posture Report
