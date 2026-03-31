@@ -34,7 +34,7 @@ fenceline check
 fenceline check --base-ref main    # compare against main branch
 ```
 
-**Monitor network during installs:**
+**Monitor network during installs** (note: this runs on your machine — it detects anomalies but does not prevent execution. A future version will use Docker sandboxing for true isolation):
 
 ```bash
 fenceline install npm install <pkg>
@@ -82,7 +82,7 @@ pip-compile requirements.in    # generates requirements.txt with pinned versions
 pip-sync                       # installs exactly what's in requirements.txt
 ```
 
-**Scan new packages before installing:**
+**Monitor network during installs** (observational — runs on your machine, see note above):
 
 ```bash
 fenceline install pip install <pkg>

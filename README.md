@@ -207,14 +207,28 @@ Detection tools that use the map and other signals.
 | Behavioral layer for domain-reuse attacks (HTTP method/path analysis) | Planned |
 | Plugin system for community detection rules | Planned |
 
-### Phase 4: Expand `future`
+### Phase 4: Sandboxed Install `v1.0 — the real goal`
+
+The current `fenceline install` monitors network on your machine — but by then, malicious code has already executed. The right approach is to **never run untrusted code on your machine at all.**
+
+| Deliverable | Status |
+|-------------|--------|
+| Sandboxed install via Docker container | Research |
+| Monitor container network from outside (not from inside) | Research |
+| If clean after X seconds → install on your machine | Research |
+| If suspicious → block and show what happened | Research |
+
+The idea: `fenceline install npm install sketchy-package` spins up a lightweight container, runs the install inside it, watches the container's network activity from the host, and only proceeds to install on your real machine if nothing suspicious happens. Your machine never touches untrusted code until it's been verified.
+
+This is the architecture that makes supply chain defense actually safe, not just observational.
+
+### Phase 5: Expand `future`
 
 | Deliverable | Status |
 |-------------|--------|
 | Cross-ecosystem capability analysis (Capslock-style, beyond Go) | Research |
 | Slopsquatting detector (AI-hallucinated package names) | Research |
 | Swift/Xcode ecosystem support (SPM, CocoaPods) | Research |
-| Pre-install behavioral sandbox | Research |
 
 Want to help with any of these? See [CONTRIBUTING.md](CONTRIBUTING.md).
 

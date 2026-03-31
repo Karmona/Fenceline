@@ -55,6 +55,8 @@ Scans lockfile changes and queries npm registry. Catches risks **before install*
 
 Monitors outbound connections during `npm install`, scoped to the install process. Catches anomalies **during install**.
 
+**Important limitation:** The current implementation runs the install on your actual machine. If a package is malicious, the code has already executed by the time the alert fires. This is observational, not preventive. The [Phase 4 roadmap](../README.md#phase-4-sandboxed-install-v10--the-real-goal) addresses this by running installs inside a Docker container and monitoring from outside — so untrusted code never touches your machine.
+
 | Signal | What it catches | Real attacks this would flag |
 |--------|----------------|------------------------------|
 | Connection to unknown IP | IP outside known CDN ranges | Codecov (178.62.86.114), Axios (142.11.206.73) |
