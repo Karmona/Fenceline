@@ -65,25 +65,69 @@ Supply chain security moves fast. New attacks, new defenses, new package manager
 
 ## Quick Start
 
-**Check your project's security posture in 30 seconds:**
+### No install needed
+
+Check your project's security posture in 30 seconds:
 
 ```bash
 bash tools/quick-check.sh
 ```
 
-This checks cooldown settings, install script protection, lockfile tracking, registry auth, provenance, Homebrew telemetry, and sensitive file protection. No installs needed.
+### Install the CLI tools
 
-**Explore the knowledge base:**
+Requires Python 3.9+:
 
 ```bash
-# Browse the exploit database
-ls exploits/
+git clone https://github.com/Karmona/Fenceline.git
+cd Fenceline
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
+```
 
-# Read the deep map for npm
-cat map/tools/npm.yaml
+### `fenceline check` — scan lockfile for risky dependency changes
 
-# Run attack simulations (safe, uses localhost only)
-cd testing && ./harness.sh
+Run in any npm project with a `package-lock.json`:
+
+```bash
+fenceline check
+```
+
+Compares your lockfile against the last git commit. For each new/updated package, checks: age, maintainer changes, install scripts, provenance. Outputs a risk score.
+
+Options:
+```bash
+fenceline check --base-ref main        # compare against a specific branch
+fenceline check --format json          # output as JSON
+fenceline check --format markdown      # output as markdown (for CI)
+fenceline check --scorecard            # also query OpenSSF Scorecard API
+```
+
+### `fenceline install` — monitor network during package installs
+
+Wraps any install command and watches for suspicious network connections:
+
+```bash
+fenceline install npm install express
+```
+
+Monitors outbound connections scoped to the install process. Compares against the [deep map](map/) (known domains, CDN IP ranges, expected ports). Alerts on unknown IPs, non-443 ports, or unexpected CDN usage.
+
+### `fenceline init` — install git hooks
+
+Auto-check lockfiles on every commit and merge:
+
+```bash
+fenceline init
+```
+
+Installs `pre-commit` and `post-merge` hooks that run `fenceline check` whenever lockfiles change.
+
+### Explore the knowledge base
+
+```bash
+ls exploits/                    # 10 real attack case studies
+cat map/tools/npm.yaml          # npm's expected network behavior
+cd testing && ./harness.sh      # run safe attack simulations
 ```
 
 ## Roadmap
@@ -96,14 +140,14 @@ Build the educational foundation.
 
 | Deliverable | Status |
 |-------------|--------|
-| Exploit case studies (10 real attacks) | Done |
-| Deep Map (8 package managers, 4 CDNs) | Done |
-| Supply chain explainer for developers | Done |
-| Tools landscape directory | Done |
-| Newsroom (ongoing incidents + defenses) | Done |
-| Quick posture check script | Done |
-| 5-minute security checklist with tested commands | Done |
-| Attack simulation test harness | Done |
+| [Exploit case studies](exploits/) (10 real attacks) | Done |
+| [Deep Map](map/) (8 package managers, 4 CDNs) | Done |
+| [Supply chain explainer](docs/supply-chain-for-dummies.md) for developers | Done |
+| [Tools landscape directory](docs/landscape.md) | Done |
+| [Newsroom](docs/newsroom.md) (ongoing incidents + defenses) | Done |
+| [Quick posture check script](tools/quick-check.sh) | Done |
+| [5-minute security checklist](docs/supply-chain-for-dummies.md#5-minute-checklist-what-you-can-do-right-now) with tested commands | Done |
+| [Attack simulation test harness](testing/) | Done |
 
 ### Phase 2: CLI Tools `v0.2 — done`
 
@@ -111,10 +155,10 @@ Detection tools that use the map and other signals.
 
 | Deliverable | Status |
 |-------------|--------|
-| `fenceline check` — lockfile diff scanner (package age, maintainer changes, capabilities, provenance) | Done |
-| `fenceline install` — install-time network monitor (compare connections against deep map) | Done |
-| `fenceline init` — git hooks for auto-checking on lockfile changes | Done |
-| 25 automated tests | Done |
+| [`fenceline check`](src/fenceline/check/) — lockfile diff scanner (package age, maintainer changes, capabilities, provenance) | Done |
+| [`fenceline install`](src/fenceline/install/) — install-time network monitor (compare connections against deep map) | Done |
+| [`fenceline init`](src/fenceline/init/) — git hooks for auto-checking on lockfile changes | Done |
+| [25 automated tests](tests/) | Done |
 | pip install distribution (`pip install -e .`) | Done |
 | Integrate with OpenSSF Scorecard API | Planned |
 
@@ -124,8 +168,8 @@ Make it run automatically on every PR.
 
 | Deliverable | Status |
 |-------------|--------|
-| GitHub Action definition (action.yml) | Done |
-| PR comment markdown formatter | Done |
+| [GitHub Action definition](action/action.yml) | Done |
+| [PR comment markdown formatter](src/fenceline/output/github.py) | Done |
 | Plugin system for community detection rules | Planned |
 | Behavioral layer for domain-reuse attacks (HTTP method/path analysis) | Planned |
 
