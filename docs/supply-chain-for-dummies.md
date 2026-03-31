@@ -136,8 +136,14 @@ echo "Summary: +$ADDED lines / -$REMOVED lines changed in $LOCKFILE"
 
 If you publish packages, enable two-factor authentication on your registry account. This is the single most effective defense against account takeover — the most common supply chain attack vector.
 
-- npm: `npm profile enable-2fa auth-and-writes`
-- PyPI: Settings > Account Security > Add 2FA
+```bash
+# npm (must be logged in first with 'npm login')
+npm profile enable-2fa auth-and-writes
+```
+
+For PyPI: go to https://pypi.org/manage/account/ > Add 2FA.
+
+Best practice: use hardware keys (WebAuthn/FIDO2) instead of TOTP apps — TOTP codes can be phished in real-time, as the chalk/debug attack showed.
 
 ### 5. Check npm provenance on critical packages
 
