@@ -8,6 +8,7 @@ Last updated: March 2026
 
 | Date | What happened | Impact | Details |
 |------|--------------|--------|---------|
+| Mar 2026 | **TeamPCP campaign** — coordinated attacks on Trivy, Checkmarx, LiteLLM, Telnyx | Security tools weaponized against users | [Case study](../exploits/2026-teampcp-campaign.md) |
 | Mar 2026 | axios npm compromise — multi-platform RAT | ~83M weekly downloads | [Case study](../exploits/2026-axios-rat.md) |
 | Sep 2025 | chalk/debug/ansi-styles — phished maintainer, crypto drainer | 2.6B weekly downloads | [Case study](../exploits/2025-chalk-debug.md) |
 | Aug 2025 | Nx/s1ngularity — GitHub Actions token theft | 2,349 credentials stolen | [Case study](../exploits/2025-nx-s1ngularity.md) |
