@@ -1,0 +1,86 @@
+# Fenceline Deep Map — Homebrew
+# Source: public DNS, GitHub/Azure ranges, Homebrew source code
+# Last verified: 2026-03-31
+
+id: homebrew
+description: "macOS/Linux package manager (brew)"
+
+primary_domains:
+  - domain: formulae.brew.sh
+    purpose: "Formula/cask metadata (JSON API, since Homebrew 4.0)"
+    cname: homebrew.github.io
+    ips:
+      - 185.199.108.153
+      - 185.199.109.153
+      - 185.199.110.153
+      - 185.199.111.153
+    cdn_provider: "GitHub Pages"
+    asn: AS36459
+    port: 443
+
+  - domain: ghcr.io
+    purpose: "Bottle (pre-built binary) downloads via GitHub Container Registry"
+    ips:
+      - 20.217.135.3
+    cdn_provider: "Microsoft Azure (GitHub)"
+    asn: AS8075
+    port: 443
+
+  - domain: github.com
+    purpose: "Tap updates, source formula fetching"
+    ips:
+      - 20.217.135.5
+    cdn_provider: "Microsoft Azure (GitHub)"
+    asn: AS8075
+    port: 443
+
+  - domain: raw.githubusercontent.com
+    purpose: "Raw file downloads from GitHub repos"
+    ips:
+      - 185.199.108.133
+      - 185.199.109.133
+      - 185.199.110.133
+      - 185.199.111.133
+    cdn_provider: "GitHub (Fastly-backed)"
+    asn: AS36459
+    port: 443
+
+  - domain: objects.githubusercontent.com
+    purpose: "GitHub release artifact downloads (cask binaries)"
+    ips:
+      - 185.199.108.133
+      - 185.199.109.133
+      - 185.199.110.133
+      - 185.199.111.133
+    cdn_provider: "GitHub (Fastly-backed)"
+    asn: AS36459
+    port: 443
+
+port: 443
+uploads_during_install: false
+
+telemetry:
+  enabled: true
+  opt_out: "HOMEBREW_NO_ANALYTICS=1"
+  endpoint: eu-central-1-1.aws.cloud2.influxdata.com
+  endpoint_path: "/api/v2/write?bucket=analytics&precision=s"
+  endpoint_ip: 3.123.149.45
+  endpoint_provider: "AWS ELB (eu-central-1, Frankfurt)"
+  endpoint_asn: AS16509
+  port: 443
+  what_is_sent: >
+    Install events (formula name), commands run, OS version,
+    CPU architecture. Sent asynchronously in background process.
+  retention: "365 days"
+  notes: >
+    Migrated from Google Analytics (US) to InfluxDB (EU) in Homebrew 4.1.0.
+    Data is aggregated and publicly available via JSON API.
+
+known_mirrors:
+  - mirrors.tuna.tsinghua.edu.cn/homebrew   # China mirror
+
+notes: >
+  Cask downloads come from each vendor's own domain (e.g., dl.google.com,
+  download.mozilla.org). These are NOT Homebrew infrastructure.
+  Configurable via HOMEBREW_BOTTLE_DOMAIN, HOMEBREW_API_DOMAIN,
+  HOMEBREW_ARTIFACT_DOMAIN environment variables.

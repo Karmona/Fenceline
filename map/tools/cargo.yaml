@@ -1,0 +1,55 @@
+# Fenceline Deep Map — cargo / crates.io
+# Source: public DNS, Fastly/AWS IP ranges, cargo source code
+# Last verified: 2026-03-31
+
+id: cargo_crates
+description: "Rust package manager (cargo) + crates.io registry"
+
+primary_domains:
+  - domain: crates.io
+    purpose: "Web UI + API (not the primary download path)"
+    ips:
+      - 3.169.71.16
+      - 3.169.71.66
+      - 3.169.71.117
+      - 3.169.71.127
+    cdn_provider: "AWS CloudFront"
+    asn: AS16509
+    port: 443
+
+  - domain: static.crates.io
+    purpose: "Crate tarball downloads (primary download CDN)"
+    cname: "fastly-static.crates.io -> dualstack.k.sni.global.fastly.net"
+    ips:
+      - 199.232.142.137
+    cdn_provider: Fastly
+    asn: AS54113
+    cdn_range: "199.232.0.0/16 (Fastly shared)"
+    port: 443
+
+  - domain: index.crates.io
+    purpose: "Sparse registry index (package metadata, since cargo 1.68+)"
+    cname: "fastly-index.crates.io -> dualstack.k.sni.global.fastly.net"
+    ips:
+      - 199.232.142.137
+    cdn_provider: Fastly
+    asn: AS54113
+    port: 443
+
+port: 443
+uploads_during_install: false
+
+telemetry:
+  enabled: false
+  notes: >
+    cargo sends NO telemetry. Sends User-Agent with cargo version.
+    Download counting is done server-side from CDN access logs.
+
+known_mirrors:
+  - rsproxy.cn   # China mirror (ByteDance)
+
+notes: >
+  Since March 2024, cargo downloads directly from static.crates.io CDN.
+  Sparse index (index.crates.io) replaced the git-based index as default.
+  File hosting donated by AWS. CDN donated by Fastly.
+  ~1.6 PB/month served from static.crates.io, ~740 TB from index.crates.io.

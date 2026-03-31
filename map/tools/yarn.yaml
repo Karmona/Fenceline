@@ -1,0 +1,56 @@
+# Fenceline Deep Map — Yarn
+# Source: public DNS, Cloudflare IP ranges, yarn source code
+# Last verified: 2026-03-31
+
+id: yarn
+description: "Yarn package manager (Classic v1 and Berry v2+)"
+
+primary_domains:
+  - domain: registry.yarnpkg.com
+    purpose: "Yarn Classic (v1) default registry"
+    cname: yarn.npmjs.org
+    ips:
+      - 104.16.0.34
+      - 104.16.1.34
+      - 104.16.2.34
+      - 104.16.3.34
+      - 104.16.4.34
+      - 104.16.5.34
+      - 104.16.6.34
+      - 104.16.7.34
+      - 104.16.8.34
+      - 104.16.9.34
+      - 104.16.10.34
+      - 104.16.11.34
+    cdn_provider: Cloudflare
+    asn: AS13335
+    cdn_range: "104.16.0.0/13"
+    port: 443
+    notes: >
+      CNAMEs to yarn.npmjs.org, which resolves to same IPs as
+      registry.npmjs.org. Effectively a proxy/alias for npm registry.
+
+  - domain: registry.npmjs.org
+    purpose: "Yarn Berry (v2+) default registry (npmRegistryServer)"
+    ips:
+      - 104.16.0.34
+      # Same IP set as npm — see npm.yaml for full list
+    cdn_provider: Cloudflare
+    asn: AS13335
+    port: 443
+
+port: 443
+uploads_during_install: false
+
+telemetry:
+  enabled: false
+  notes: "Yarn sends NO telemetry. Sends User-Agent header with yarn version."
+
+known_mirrors:
+  - registry.npmmirror.com   # Same mirrors as npm
+
+notes: >
+  Yarn Classic (v1) defaults to registry.yarnpkg.com which CNAMEs to npm.
+  Yarn Berry (v2+) defaults directly to registry.npmjs.org.
+  registry.yarnpkg.com cannot be removed due to CI allowlist dependencies.
+  Both ultimately resolve to the same Cloudflare-fronted npm infrastructure.

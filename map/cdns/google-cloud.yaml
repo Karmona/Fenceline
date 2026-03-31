@@ -1,0 +1,26 @@
+# Fenceline CDN Reference — Google Cloud
+# Source: https://www.gstatic.com/ipranges/cloud.json
+# Last verified: 2026-03-31
+
+id: google_cloud
+name: Google Cloud
+asn: AS15169
+
+used_by:
+  - go_modules  # proxy.golang.org, sum.golang.org, storage.googleapis.com
+
+known_prefixes:
+  # Go module proxy and checksum services resolve to 142.250.x.x
+  # These are Google-owned ranges shared across many services
+  - "142.250.0.0/15 (Google general)"
+
+source_url: "https://www.gstatic.com/ipranges/cloud.json"
+notes: >
+  Google Cloud IP ranges are very large and shared across all GCP services.
+  142.250.x.x ranges are used by proxy.golang.org and related Go services.
+  storage.googleapis.com is the critical hidden dependency -- Go's module
+  proxy returns 302 redirects to signed GCS URLs. Firewalls must allow
+  storage.googleapis.com for Go modules to work.
+  The cloud.json file is the authoritative source for GCP ranges.
+  Sigstore services (used by npm provenance) also run on Google Cloud
+  under AS396982 (Google LLC).

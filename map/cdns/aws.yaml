@@ -1,0 +1,29 @@
+# Fenceline CDN Reference — AWS / GitHub / Azure
+# Source: https://api.github.com/meta
+# Last verified: 2026-03-31
+
+id: aws_github_azure
+name: "AWS / GitHub (Azure)"
+asn:
+  - AS16509   # AWS
+  - AS8075    # Microsoft Azure (GitHub infrastructure)
+  - AS36459   # GitHub
+
+used_by:
+  - homebrew   # ghcr.io, github.com, raw.githubusercontent.com
+  - composer   # api.github.com, codeload.github.com
+  - cargo      # crates.io (AWS CloudFront)
+
+github_prefixes:
+  - 185.199.108.0/22    # GitHub Pages / CDN
+  - 140.82.112.0/20     # GitHub main
+  - 20.217.128.0/20     # GitHub (Azure)
+
+source_url: "https://api.github.com/meta"
+notes: >
+  GitHub infrastructure runs on Microsoft Azure. The /meta API endpoint
+  provides current IP ranges for pages, actions, packages, and more.
+  AWS CloudFront is used by crates.io for the web API.
+  Homebrew's telemetry endpoint runs on AWS ELB in eu-central-1.
+  AWS publishes ranges at https://ip-ranges.amazonaws.com/ip-ranges.json
+  but the file is very large (all AWS) -- filter by service and region.

@@ -1,0 +1,74 @@
+# Fenceline Deep Map — pip / PyPI
+# Source: public DNS, Fastly IP ranges, pip source code
+# Last verified: 2026-03-31
+
+id: pip_pypi
+description: "Python package installer (pip) + Python Package Index (PyPI)"
+
+primary_domains:
+  - domain: pypi.org
+    purpose: "Package metadata (JSON API, simple index)"
+    ips:
+      - 151.101.0.223
+      - 151.101.64.223
+      - 151.101.128.223
+      - 151.101.192.223
+    cdn_provider: Fastly
+    asn: AS54113
+    cdn_range: "151.101.0.0/16"
+    port: 443
+
+  - domain: files.pythonhosted.org
+    purpose: "Package file downloads (wheels, sdists)"
+    cname: dualstack.python.map.fastly.net
+    ips:
+      - 151.101.0.223
+      - 151.101.64.223
+      - 151.101.128.223
+      - 151.101.192.223
+    cdn_provider: Fastly
+    asn: AS54113
+    cdn_range: "151.101.0.0/16"
+    port: 443
+
+upload_domains:
+  - domain: upload.pypi.org
+    purpose: "Package uploads (twine/flit publish only, NOT used during install)"
+    ips:
+      - 18.119.18.71
+      - 13.58.222.138
+      - 3.128.211.88
+    cdn_provider: "AWS EC2 (us-east-2)"
+    asn: AS16509
+    port: 443
+
+  - domain: test.pypi.org
+    purpose: "Test index (not used in normal installs)"
+    cname: dualstack.python.map.fastly.net
+    ips:
+      - 151.101.0.223
+      - 151.101.64.223
+      - 151.101.128.223
+      - 151.101.192.223
+    cdn_provider: Fastly
+    asn: AS54113
+    port: 443
+
+port: 443
+uploads_during_install: false
+
+telemetry:
+  enabled: false
+  notes: >
+    pip itself sends NO telemetry. It sends a User-Agent header with pip
+    version, Python version, and OS info. PyPI server-side uses Google
+    Analytics for traffic analytics and Datadog for APM (not client-side).
+
+known_mirrors:
+  - pypi.tuna.tsinghua.edu.cn   # China mirror (Tsinghua)
+  - mirrors.aliyun.com/pypi     # China mirror (Alibaba)
+
+notes: >
+  Storage backend is AWS S3 + Google Cloud Storage.
+  CDN is donated by Fastly (heavy caching, no client rate limiting).
+  pypi.io redirects to pypi.org.

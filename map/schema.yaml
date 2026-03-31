@@ -1,0 +1,69 @@
+# Fenceline Deep Map — Schema Definition
+# Every tool map file should follow this structure.
+# Fields marked (required) must be present. Others are optional.
+
+schema_version: "1.0"
+
+tool_entry:
+  # (required) Unique identifier, lowercase with underscores
+  id: string
+
+  # (required) Human-readable description of the tool
+  description: string
+
+  # (required) Domains contacted during normal package install/update
+  primary_domains:
+    - domain: string          # (required) FQDN
+      purpose: string         # (required) What this domain is used for
+      ips: [string]           # Current DNS resolution (point-in-time)
+      cname: string           # CNAME chain if applicable
+      cdn_provider: string    # (required) CDN or hosting provider name
+      asn: string             # (required) Autonomous System Number (e.g., AS13335)
+      cdn_range: string       # CIDR range for the CDN
+      port: integer           # Port if different from top-level default
+      notes: string           # Additional context
+
+  # Domains used only for publishing/uploading (not during install)
+  upload_domains:
+    - domain: string
+      purpose: string
+      ips: [string]
+      cdn_provider: string
+      asn: string
+      port: integer
+
+  # Domains used for provenance/signing verification
+  provenance_domains:
+    - domain: string
+      purpose: string
+      ips: [string]
+      cdn_provider: string
+      asn: string
+      port: integer
+
+  # (required) Expected port for all connections (should be 443)
+  port: integer
+
+  # (required) Whether the tool uploads data during package install
+  # This should ALWAYS be false for legitimate package managers
+  uploads_during_install: boolean
+
+  # (required) Telemetry configuration
+  telemetry:
+    enabled: boolean          # (required) Whether any telemetry exists
+    opt_out: string           # Environment variable or flag to disable
+    endpoint: string          # Telemetry endpoint domain
+    endpoint_ip: string       # Telemetry endpoint IP
+    endpoint_provider: string # Hosting provider for telemetry endpoint
+    endpoint_asn: string      # ASN for telemetry endpoint
+    port: integer             # Telemetry endpoint port
+    what_is_sent: string      # Description of telemetry data
+    retention: string         # How long data is retained
+    notes: string             # Additional context
+
+  # Known official or community mirrors
+  known_mirrors:
+    - string
+
+  # Free-form notes about the tool's network behavior
+  notes: string

@@ -1,0 +1,36 @@
+# Fenceline CDN Reference — Fastly
+# Source: https://api.fastly.com/public-ip-list
+# Last verified: 2026-03-31
+
+id: fastly
+name: Fastly
+asn: AS54113
+
+used_by:
+  - pip       # pypi.org, files.pythonhosted.org
+  - cargo     # static.crates.io, index.crates.io
+  - rubygems  # rubygems.org, api.rubygems.org, index.rubygems.org
+
+ipv4_prefixes:
+  - 23.235.32.0/20
+  - 43.249.72.0/22
+  - 103.244.50.0/24
+  - 103.245.222.0/23
+  - 104.156.80.0/20
+  - 140.248.64.0/18
+  - 140.248.128.0/17
+  - 146.75.0.0/17
+  - 151.101.0.0/16
+  - 157.52.64.0/18
+  - 167.82.0.0/17
+  - 172.111.64.0/18
+  - 185.31.16.0/22
+  - 199.27.72.0/21
+  - 199.232.0.0/16
+
+source_url: "https://api.fastly.com/public-ip-list"
+notes: >
+  Fastly donates CDN capacity to PyPI, crates.io, and RubyGems.
+  Most package manager traffic resolves within 151.101.0.0/16 and 199.232.0.0/16.
+  Fastly publishes their ranges via a JSON API endpoint.
+  These are sample prefixes -- check the source URL for the complete current list.

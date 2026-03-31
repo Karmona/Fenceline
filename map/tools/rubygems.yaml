@@ -1,0 +1,60 @@
+# Fenceline Deep Map — RubyGems
+# Source: public DNS, Fastly IP ranges, gem/bundler source code
+# Last verified: 2026-03-31
+
+id: rubygems
+description: "Ruby package manager (gem) + RubyGems.org registry"
+
+primary_domains:
+  - domain: rubygems.org
+    purpose: "Web UI + gem downloads"
+    ips:
+      - 151.101.1.227
+      - 151.101.65.227
+      - 151.101.129.227
+      - 151.101.193.227
+    cdn_provider: Fastly
+    asn: AS54113
+    cdn_range: "151.101.0.0/16"
+    port: 443
+
+  - domain: api.rubygems.org
+    purpose: "API endpoint (gem search, dependency resolution)"
+    cname: rubygems.org
+    ips:
+      - 151.101.1.227
+      - 151.101.65.227
+      - 151.101.129.227
+      - 151.101.193.227
+    cdn_provider: Fastly
+    asn: AS54113
+    port: 443
+
+  - domain: index.rubygems.org
+    purpose: "Compact index (dependency resolution, since Bundler 1.12+)"
+    cname: rubygems.org
+    ips:
+      - 151.101.1.227
+      - 151.101.65.227
+      - 151.101.129.227
+      - 151.101.193.227
+    cdn_provider: Fastly
+    asn: AS54113
+    port: 443
+
+port: 443
+uploads_during_install: false
+
+telemetry:
+  enabled: false
+  notes: >
+    gem/bundler send NO client-side telemetry. RubyGems.org tracks
+    download counts server-side. Sends User-Agent with gem/bundler version.
+
+known_mirrors:
+  - gems.ruby-china.com   # China mirror
+
+notes: >
+  All three domains (rubygems.org, api.rubygems.org, index.rubygems.org)
+  resolve to the same Fastly IPs. CDN donated by Fastly.
+  Storage backend is AWS S3.

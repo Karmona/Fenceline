@@ -1,0 +1,81 @@
+# Fenceline Deep Map — npm
+# Source: public DNS, Cloudflare IP ranges, npm CLI source code
+# Last verified: 2026-03-31
+
+id: npm
+description: "Node.js package manager (npm CLI)"
+
+primary_domains:
+  - domain: registry.npmjs.org
+    purpose: "Package metadata + tarball downloads (default registry)"
+    ips:
+      - 104.16.0.34
+      - 104.16.1.34
+      - 104.16.2.34
+      - 104.16.3.34
+      - 104.16.4.34
+      - 104.16.5.34
+      - 104.16.6.34
+      - 104.16.7.34
+      - 104.16.8.34
+      - 104.16.9.34
+      - 104.16.10.34
+      - 104.16.11.34
+    cdn_provider: Cloudflare
+    asn: AS13335
+    cdn_range: "104.16.0.0/13"
+    port: 443
+
+  - domain: www.npmjs.com
+    purpose: "Web UI (not used by CLI during install)"
+    ips:
+      - 104.17.134.117
+      - 104.17.135.117
+    cdn_provider: Cloudflare
+    asn: AS13335
+    port: 443
+
+provenance_domains:
+  - domain: fulcio.sigstore.dev
+    purpose: "Sigstore certificate authority (npm provenance verification)"
+    ips:
+      - 34.36.164.164
+    cdn_provider: Google Cloud
+    asn: AS396982
+    port: 443
+
+  - domain: rekor.sigstore.dev
+    purpose: "Sigstore transparency log (npm provenance verification)"
+    ips:
+      - 34.36.47.134
+    cdn_provider: Google Cloud
+    asn: AS396982
+    port: 443
+
+  - domain: sigstore.dev
+    purpose: "Sigstore root (npm provenance)"
+    ips:
+      - 99.83.231.61
+      - 75.2.60.5
+    cdn_provider: "AWS Global Accelerator"
+    asn: AS16509
+    port: 443
+
+port: 443
+uploads_during_install: false
+
+telemetry:
+  enabled: false
+  notes: >
+    npm CLI itself does NOT send telemetry. It sends a User-Agent header
+    with node/npm version and OS info. npm audit submits dependency tree
+    to registry.npmjs.org for vulnerability checking.
+
+known_mirrors:
+  - registry.npmmirror.com   # China mirror (Alibaba)
+  - npm.pkg.github.com       # GitHub Packages
+
+notes: >
+  registry.npmjs.org serves both metadata (JSON) and tarballs.
+  Yarn Classic (v1) CNAMEs registry.yarnpkg.com -> yarn.npmjs.org -> same IPs.
+  npm audit sends dependency tree TO the registry (not a separate endpoint).

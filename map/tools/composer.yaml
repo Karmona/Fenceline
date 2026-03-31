@@ -1,0 +1,68 @@
+# Fenceline Deep Map — Composer / Packagist
+# Source: public DNS, CDN77/Bunny.net ranges, Composer source code
+# Last verified: 2026-03-31
+
+id: composer_packagist
+description: "PHP dependency manager (Composer) + Packagist.org registry"
+
+primary_domains:
+  - domain: packagist.org
+    purpose: "Package metadata (packages.json, p2/ provider API)"
+    ips:
+      - 138.199.37.227
+    cdn_provider: "CDN77"
+    asn: AS60068
+    port: 443
+
+  - domain: repo.packagist.org
+    purpose: "Metadata CDN endpoint (Composer 2+ default)"
+    ips:
+      - 185.111.111.159
+    cdn_provider: "Bunny.net (CDNEXT)"
+    asn: AS212238
+    port: 443
+
+  - domain: api.github.com
+    purpose: "VCS metadata resolution (Composer resolves repos via GitHub API)"
+    ips:
+      - 20.217.135.0
+    cdn_provider: "Microsoft Azure (GitHub)"
+    asn: AS8075
+    port: 443
+
+  - domain: codeload.github.com
+    purpose: "Source archive downloads (zip/tar from GitHub)"
+    ips:
+      - 20.217.135.8
+    cdn_provider: "Microsoft Azure (GitHub)"
+    asn: AS8075
+    port: 443
+
+  - domain: getcomposer.org
+    purpose: "Composer installer/self-update downloads"
+    ips:
+      - 57.128.19.244
+    cdn_provider: "OVH"
+    asn: AS16276
+    port: 443
+
+port: 443
+uploads_during_install: false
+
+telemetry:
+  enabled: false
+  notes: >
+    Composer sends NO telemetry. Sends User-Agent with Composer version,
+    PHP version, and OS info.
+
+known_mirrors:
+  - mirrors.aliyun.com/composer    # China mirror (Alibaba)
+  - packagist.phpcomposer.com      # China mirror
+
+notes: >
+  Packagist metadata is served via Bunny.net CDN (formerly Cloudflare).
+  Actual package source is downloaded from VCS hosts (github.com, gitlab.com,
+  bitbucket.org) -- not from Packagist itself.
+  Composer resolves packages by fetching metadata from Packagist, then
+  downloading archives from the VCS host (usually codeload.github.com).
+  Private Packagist (packagist.com) is a separate commercial service.

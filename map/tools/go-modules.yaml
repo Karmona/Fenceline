@@ -1,0 +1,68 @@
+# Fenceline Deep Map — Go Modules
+# Source: public DNS, Google Cloud ranges, Go toolchain source code
+# Last verified: 2026-03-31
+
+id: go_modules
+description: "Go module proxy and checksum database"
+
+primary_domains:
+  - domain: proxy.golang.org
+    purpose: "Module proxy (metadata + source archives, default GOPROXY)"
+    ips:
+      - 142.250.75.145
+    cdn_provider: Google Cloud
+    asn: AS15169
+    port: 443
+
+  - domain: sum.golang.org
+    purpose: "Checksum database (go.sum verification, default GONOSUMCHECK)"
+    ips:
+      - 142.250.75.177
+    cdn_provider: Google Cloud
+    asn: AS15169
+    port: 443
+
+  - domain: index.golang.org
+    purpose: "New module version feed/index"
+    ips:
+      - 142.250.75.177
+    cdn_provider: Google Cloud
+    asn: AS15169
+    port: 443
+
+  - domain: storage.googleapis.com
+    purpose: "Module archive storage (302 redirect target from proxy.golang.org)"
+    ips:
+      - 142.250.75.59
+      - 142.250.75.91
+      - 142.250.75.123
+      - 142.250.75.155
+      - 142.250.75.187
+      - 142.250.75.219
+    cdn_provider: "Google Cloud Storage"
+    asn: AS15169
+    port: 443
+    notes: >
+      proxy.golang.org returns 302 redirects to signed GCS URLs.
+      This is an UNDOCUMENTED dependency -- domain allowlists MUST
+      include storage.googleapis.com for Go modules to work.
+
+port: 443
+uploads_during_install: false
+
+telemetry:
+  enabled: false
+  notes: >
+    Go toolchain sends NO telemetry. GOPROXY requests include module
+    path and version in the URL. Google may log access to their proxy.
+
+known_mirrors:
+  - goproxy.cn    # China mirror (Qiniu/CDN77)
+  - goproxy.io    # Alternative mirror
+
+notes: >
+  Since Go 1.13, GOPROXY defaults to "https://proxy.golang.org,direct".
+  The "direct" fallback means go may also connect to any VCS host
+  (github.com, gitlab.com, etc.) if the proxy doesn't have the module.
+  All three services (proxy, sum, index) are run by Google.
+  CRITICAL: storage.googleapis.com is a hidden dependency via 302 redirects.
