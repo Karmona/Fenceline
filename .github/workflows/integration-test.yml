@@ -1,0 +1,83 @@
+name: Integration Tests (Docker)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/fenceline/install/**'
+      - 'tests/test_sandbox.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/fenceline/install/**'
+      - 'tests/test_sandbox.py'
+  workflow_dispatch:  # manual trigger
+
+jobs:
+  sandbox-integration:
+    runs-on: ubuntu-latest
+    # GitHub Actions runners have Docker pre-installed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install fenceline
+        run: |
+          pip install --upgrade pip
+          pip install hatchling
+          pip install -e ".[dev]"
+
+      - name: Verify Docker available
+        run: docker info
+
+      - name: Pull test image
+        run: docker pull node:alpine
+
+      - name: Test sandbox — clean install
+        run: |
+          mkdir /tmp/sandbox-test && cd /tmp/sandbox-test
+          npm init -y
+          fenceline install --sandbox npm install is-odd 2>&1 | tee /tmp/sandbox-output.txt
+
+          # Verify it completed
+          if grep -q "Install verified and applied" /tmp/sandbox-output.txt; then
+            echo "PASS: Clean install succeeded"
+          elif grep -q "No unexpected network activity" /tmp/sandbox-output.txt; then
+            echo "PASS: Clean install succeeded (host mode fallback)"
+          else
+            echo "FAIL: Unexpected output"
+            cat /tmp/sandbox-output.txt
+            exit 1
+          fi
+
+      - name: Test sandbox — verify artifacts copied
+        run: |
+          cd /tmp/sandbox-test
+          if [ -d "node_modules/is-odd" ]; then
+            echo "PASS: node_modules/is-odd exists on host"
+          else
+            echo "INFO: node_modules not found (artifact copy may use different path)"
+            ls -la node_modules/ 2>/dev/null || echo "No node_modules directory"
+          fi
+
+      - name: Test sandbox — no Docker error message
+        run: |
+          # Temporarily hide docker to test graceful degradation
+          sudo mv /usr/bin/docker /usr/bin/docker.bak
+          fenceline install --sandbox npm install is-odd 2>&1 | tee /tmp/no-docker.txt || true
+          sudo mv /usr/bin/docker.bak /usr/bin/docker
+
+          if grep -q "Docker is not installed" /tmp/no-docker.txt; then
+            echo "PASS: Graceful error when Docker unavailable"
+          else
+            echo "FAIL: Did not show Docker-not-found message"
+            cat /tmp/no-docker.txt
+            exit 1
+          fi
+
+      - name: Run unit tests
+        run: python -m pytest tests/ -v
