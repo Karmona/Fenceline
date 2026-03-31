@@ -1,5 +1,10 @@
 # Fenceline
 
+[![CI](https://github.com/Karmona/Fenceline/actions/workflows/ci.yml/badge.svg)](https://github.com/Karmona/Fenceline/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
+[![v0.2.0](https://img.shields.io/badge/version-0.2.0-orange.svg)](CHANGELOG.md)
+
 **Create clarity in chaos.**
 
 An open source project to understand, map, and defend against software supply chain attacks. Documentation-first. Community-driven. Best effort.
@@ -94,6 +99,20 @@ fenceline check
 
 Compares your lockfile against the last git commit. For each new/updated package, checks: age, maintainer changes, install scripts, provenance. Outputs a risk score.
 
+Example output:
+```
+[!] HIGH     ( 55) axios  (new) -> 1.14.0
+         +30  very_new_version: Published 3d ago (< 7 days)
+         +10  maintainer_added: New maintainers detected
+         +10  no_provenance: No Sigstore provenance attestation
+         + 5  new_package: Newly added dependency
+
+[~] MEDIUM   ( 25) form-data  (new) -> 4.0.5
+         +10  maintainer_added: New maintainers detected
+         +10  no_provenance: No Sigstore provenance attestation
+         + 5  new_package: Newly added dependency
+```
+
 Options:
 ```bash
 fenceline check --base-ref main        # compare against a specific branch
@@ -111,6 +130,19 @@ fenceline install npm install express
 ```
 
 Monitors outbound connections scoped to the install process. Compares against the [deep map](map/) (known domains, CDN IP ranges, expected ports). Alerts on unknown IPs, non-443 ports, or unexpected CDN usage.
+
+Example output:
+```
+[fenceline] Monitoring network during: npm install express
+added 65 packages in 2s
+[fenceline] No unexpected network activity detected.
+```
+
+If something suspicious is found:
+```
+[fenceline] 1 network alert(s) during install:
+  !! [CRITICAL] node -> 45.33.32.156:8080 — Non-standard port 8080
+```
 
 ### `fenceline init` — install git hooks
 

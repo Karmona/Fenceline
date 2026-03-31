@@ -55,16 +55,16 @@ fi
 """
 
 
-def run(args: List[str]) -> int:
+def run(args) -> int:
     """Install git hooks for Fenceline.
 
     Args:
-        args: CLI arguments. Supports --force to overwrite existing hooks.
+        args: argparse.Namespace or list. Supports --force to overwrite existing hooks.
 
     Returns:
         0 on success, 1 on error.
     """
-    force = "--force" in args
+    force = getattr(args, 'force', False) if hasattr(args, 'force') else "--force" in args
 
     # Find .git directory
     try:

@@ -7,7 +7,8 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
 
-_USER_AGENT = "fenceline/0.1 (https://github.com/karmona/fenceline)"
+from fenceline import __version__ as _ver
+_USER_AGENT = f"fenceline/{_ver} (https://github.com/Karmona/Fenceline)"
 _REGISTRY = "https://registry.npmjs.org"
 _TIMEOUT = 15  # seconds
 
