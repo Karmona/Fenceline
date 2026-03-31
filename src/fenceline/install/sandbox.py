@@ -11,6 +11,7 @@ Requires Docker to be installed and running.
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -43,11 +44,35 @@ _ARTIFACT_PATHS = {
 }
 
 
+def _find_docker() -> str:
+    """Find the docker executable, checking common paths."""
+    import shutil
+    docker = shutil.which("docker")
+    if docker:
+        return docker
+    # Check common locations
+    for path in ["/usr/local/bin/docker", "/opt/homebrew/bin/docker", "/usr/bin/docker"]:
+        if os.path.isfile(path):
+            return path
+    return "docker"  # fallback, will fail with FileNotFoundError
+
+
+_DOCKER_BIN: Optional[str] = None
+
+
+def _docker() -> str:
+    """Get the docker binary path (cached)."""
+    global _DOCKER_BIN
+    if _DOCKER_BIN is None:
+        _DOCKER_BIN = _find_docker()
+    return _DOCKER_BIN
+
+
 def docker_available() -> bool:
     """Check if Docker is installed and the daemon is running."""
     try:
         result = subprocess.run(
-            ["docker", "info"],
+            [_docker(), "info"],
             capture_output=True,
             timeout=10,
         )
@@ -112,10 +137,14 @@ class ContainerMonitor:
             time.sleep(self._poll_interval)
 
     def _get_container_connections(self) -> List[Connection]:
-        """Get network connections from inside the container via docker exec."""
+        """Get network connections from inside the container via docker exec.
+
+        Uses netstat (available in Alpine via busybox) since ss is not
+        installed by default in Alpine images.
+        """
         try:
             result = subprocess.run(
-                ["docker", "exec", self._container_id, "ss", "-tnp"],
+                [_docker(), "exec", self._container_id, "netstat", "-tnp"],
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -123,7 +152,63 @@ class ContainerMonitor:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return []
 
-        return parse_ss_output(result.stdout)
+        return parse_netstat_output(result.stdout)
+
+
+def parse_netstat_output(output: str) -> List[Connection]:
+    """Parse netstat -tnp output into Connection objects.
+
+    Alpine/BusyBox netstat format:
+    Proto Recv-Q Send-Q Local Address       Foreign Address     State       PID/Program name
+    tcp        0      0 172.17.0.2:34567    93.184.216.34:8080  ESTABLISHED 1/node
+    """
+    connections: List[Connection] = []
+    now = time.time()
+
+    for line in output.splitlines():
+        # Catch both ESTABLISHED and SYN_SENT (outbound attempt)
+        if "ESTABLISHED" not in line and "SYN_SENT" not in line:
+            continue
+
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+
+        # Foreign address is column 4 (0-indexed)
+        foreign = parts[4]
+        colon_idx = foreign.rfind(":")
+        if colon_idx == -1:
+            continue
+
+        remote_ip = foreign[:colon_idx]
+        try:
+            remote_port = int(foreign[colon_idx + 1:])
+        except ValueError:
+            continue
+
+        # PID/Program is the last column: "1/node"
+        pid = 0
+        process_name = ""
+        pid_prog = parts[-1] if "/" in parts[-1] else ""
+        if pid_prog:
+            try:
+                pid_str, process_name = pid_prog.split("/", 1)
+                pid = int(pid_str)
+            except (ValueError, IndexError):
+                pass
+
+        connections.append(
+            Connection(
+                pid=pid,
+                process_name=process_name,
+                remote_ip=remote_ip,
+                remote_port=remote_port,
+                protocol="TCP",
+                timestamp=now,
+            )
+        )
+
+    return connections
 
 
 def parse_ss_output(output: str) -> List[Connection]:
@@ -198,9 +283,11 @@ class SandboxedInstall:
         alerts, exit_code = sandbox.run(["npm", "install", "express"])
     """
 
-    def __init__(self, deep_map: DeepMap, timeout: int = 300) -> None:
+    def __init__(self, deep_map: DeepMap, timeout: int = 300,
+                 monitor_seconds: int = 60) -> None:
         self._deep_map = deep_map
         self._timeout = timeout
+        self._monitor_seconds = monitor_seconds
         self._container_id: Optional[str] = None
 
     def run(self, cmd: list[str]) -> Tuple[List[Alert], int]:
@@ -208,22 +295,29 @@ class SandboxedInstall:
 
         Returns (alerts, exit_code). If alerts are found, artifacts
         are NOT copied to the host.
+
+        The container runs the install command plus a monitoring period
+        (default 10 seconds) during which network connections are observed.
         """
         image = detect_image(cmd)
         tool_id = cmd[0].lower() if cmd else "unknown"
+        monitor_secs = self._monitor_seconds
 
         print(f"[fenceline] Sandbox: pulling {image}...")
 
-        # Start container in detached mode with a working directory
+        # Start container — run the command, then keep alive for monitoring
         try:
             start_result = subprocess.run(
                 [
-                    "docker", "run", "-d",
+                    _docker(), "run", "-d",
                     "-w", "/app",
                     image,
                     "sh", "-c",
-                    # Install command + sleep to keep container alive for monitoring
-                    f"{' '.join(cmd)} ; sleep 5",
+                    # Quote each argument to prevent shell interpretation of
+                    # special characters (semicolons, quotes, etc.) in the
+                    # user's command. Without this, JS code like
+                    # node -e "require('net');..." gets split on ';' by sh.
+                    f"{' '.join(shlex.quote(c) for c in cmd)} ; sleep {monitor_secs}",
                 ],
                 capture_output=True,
                 text=True,
@@ -243,22 +337,25 @@ class SandboxedInstall:
 
         # Start network monitor
         monitor = ContainerMonitor(
-            self._container_id, self._deep_map, tool_id
+            self._container_id, self._deep_map, tool_id,
+            poll_interval=0.5,
         )
         monitor.start()
 
-        # Wait for container to finish
+        # Wait for the container to finish using Popen (non-blocking wait
+        # via communicate) so the monitor thread can poll connections.
+        print(f"[fenceline] Sandbox: monitoring network for ~{monitor_secs}s...")
         try:
-            wait_result = subprocess.run(
-                ["docker", "wait", self._container_id],
-                capture_output=True,
-                text=True,
-                timeout=self._timeout,
+            wait_proc = subprocess.Popen(
+                [_docker(), "wait", self._container_id],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
+            stdout, _ = wait_proc.communicate(timeout=self._timeout)
             try:
-                exit_code = int(wait_result.stdout.strip())
-            except ValueError:
-                exit_code = 1
+                exit_code = int(stdout.decode().strip())
+            except (ValueError, TypeError):
+                exit_code = 0
         except subprocess.TimeoutExpired:
             print(f"[fenceline] Sandbox: timeout after {self._timeout}s — killing container")
             self._kill_container()
@@ -303,7 +400,7 @@ class SandboxedInstall:
         dest = str(host_dir) + "/"
         try:
             subprocess.run(
-                ["docker", "cp", f"{self._container_id}:{container_path}", dest],
+                [_docker(), "cp", f"{self._container_id}:{container_path}", dest],
                 capture_output=True,
                 timeout=60,
             )
@@ -316,7 +413,7 @@ class SandboxedInstall:
         if self._container_id:
             try:
                 subprocess.run(
-                    ["docker", "rm", "-f", self._container_id],
+                    [_docker(), "rm", "-f", self._container_id],
                     capture_output=True,
                     timeout=10,
                 )

@@ -183,11 +183,13 @@ class TestContainerMonitor:
 
     @patch("fenceline.install.sandbox.subprocess.run")
     def test_detects_suspicious_connection(self, mock_run):
+        # netstat -tnp format (not ss format)
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout=(
-                "State Recv-Q Send-Q Local Peer Process\n"
-                'ESTAB 0 0 172.17.0.2:1234 45.33.32.1:8080 users:(("node",pid=1,fd=3))\n'
+                "Active Internet connections (w/o servers)\n"
+                "Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name\n"
+                "tcp        0      1 172.17.0.2:1234         45.33.32.1:8080         SYN_SENT    1/node\n"
             ),
         )
 
