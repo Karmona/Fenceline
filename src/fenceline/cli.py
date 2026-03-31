@@ -71,6 +71,12 @@ def build_parser() -> argparse.ArgumentParser:
         "install", help="Monitor a package install in real time"
     )
     install_parser.add_argument(
+        "--sandbox",
+        action="store_true",
+        help="Run install in Docker container (requires Docker). "
+             "Blocks install if suspicious network activity is detected.",
+    )
+    install_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
     )
     install_parser.add_argument(

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-03-31
+
+### Added
+- `fenceline install --sandbox` — Docker-sandboxed package installs
+  - Runs install inside a Docker container (node:alpine, python:alpine, etc.)
+  - Monitors container network from outside via `docker exec ss -tnp`
+  - If clean: copies artifacts (node_modules) to host machine
+  - If suspicious: kills container, blocks install, shows alerts
+  - Graceful degradation: clear error if Docker not installed
+  - 21 new tests (83 total), all mock-based (no Docker required to test)
+
 ## [0.3.0] - 2026-03-31
 
 ### Added

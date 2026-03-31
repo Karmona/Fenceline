@@ -1,7 +1,7 @@
 """Wrapper for monitored package installs.
 
 Usage: fenceline install <command...>
-Example: fenceline install npm install express
+       fenceline install --sandbox <command...>
 """
 
 from __future__ import annotations
@@ -15,11 +15,19 @@ from fenceline.install.monitor import NetworkMonitor
 
 
 def run(args) -> int:
-    """Run a package install command with network monitoring."""
+    """Run a package install command with network monitoring.
+
+    If --sandbox is set, runs the install inside a Docker container
+    and only copies artifacts to the host if no suspicious network
+    activity is detected. Otherwise, monitors on the host machine
+    (observational only — code executes before alerts fire).
+    """
+    sandbox = getattr(args, 'sandbox', False)
+
     cmd = args.command if hasattr(args, 'command') else args
     if not cmd:
-        print("Usage: fenceline install <command...>", file=sys.stderr)
-        print("Example: fenceline install npm install express", file=sys.stderr)
+        print("Usage: fenceline install [--sandbox] <command...>", file=sys.stderr)
+        print("Example: fenceline install --sandbox npm install express", file=sys.stderr)
         return 1
 
     # Strip leading '--' if present
@@ -27,12 +35,37 @@ def run(args) -> int:
         cmd = cmd[1:]
 
     if not cmd:
-        print("Usage: fenceline install <command...>", file=sys.stderr)
+        print("Usage: fenceline install [--sandbox] <command...>", file=sys.stderr)
         return 1
 
-    # Detect package manager from the first argument
-    args_list = cmd
-    command_name = args_list[0]
+    if sandbox:
+        return _run_sandboxed(cmd)
+    else:
+        return _run_host(cmd)
+
+
+def _run_sandboxed(cmd: list[str]) -> int:
+    """Run install in a Docker container (preventive — blocks if suspicious)."""
+    from fenceline.install.sandbox import SandboxedInstall, docker_available
+
+    if not docker_available():
+        print(
+            "[fenceline] Error: Docker is not installed or not running.\n"
+            "[fenceline] Install Docker: https://docs.docker.com/get-docker/\n"
+            "[fenceline] Or run without --sandbox for host-based monitoring.",
+            file=sys.stderr,
+        )
+        return 1
+
+    deep_map = load_maps()
+    sandbox = SandboxedInstall(deep_map)
+    alerts, exit_code = sandbox.run(cmd)
+    return exit_code
+
+
+def _run_host(cmd: list[str]) -> int:
+    """Run install on host with network monitoring (observational only)."""
+    command_name = cmd[0]
     supported = {"npm", "pip", "pip3", "yarn", "pnpm", "cargo", "brew"}
     if command_name not in supported:
         print(
@@ -41,22 +74,18 @@ def run(args) -> int:
             file=sys.stderr,
         )
 
-    # Load deep map
     deep_map = load_maps()
-
-    # Create monitor (don't start yet — need PID first)
     monitor = NetworkMonitor(deep_map)
 
-    print(f"[fenceline] Monitoring network during: {' '.join(args_list)}")
+    print(f"[fenceline] Monitoring network during: {' '.join(cmd)}")
+    print(f"[fenceline] Note: running on your machine (use --sandbox for isolation)")
 
     try:
-        # Start the command
         proc = subprocess.Popen(
-            args_list,
+            cmd,
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
-        # Now start monitoring scoped to this process
         monitor.set_watch_pid(proc.pid)
         monitor.start()
         exit_code = proc.wait()
@@ -68,14 +97,13 @@ def run(args) -> int:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
-        exit_code = 130  # Standard Ctrl+C exit code
+        exit_code = 130
 
     except FileNotFoundError:
         print(f"Error: command '{command_name}' not found.", file=sys.stderr)
         monitor.stop()
         return 127
 
-    # Stop monitor and collect alerts
     alerts = monitor.stop()
 
     if alerts:

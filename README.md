@@ -3,7 +3,7 @@
 [![CI](https://github.com/Karmona/Fenceline/actions/workflows/ci.yml/badge.svg)](https://github.com/Karmona/Fenceline/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
-[![v0.2.0](https://img.shields.io/badge/version-0.3.0-orange.svg)](CHANGELOG.md)
+[![v0.2.0](https://img.shields.io/badge/version-0.4.0-orange.svg)](CHANGELOG.md)
 
 **Create clarity in chaos.**
 
@@ -124,26 +124,35 @@ fenceline check --format markdown      # output as markdown (for CI)
 
 ### `fenceline install` — monitor network during package installs
 
-Wraps any install command and watches for suspicious network connections:
+**With Docker (recommended — untrusted code never runs on your machine):**
+
+```bash
+fenceline install --sandbox npm install express
+```
+
+Runs the install inside a Docker container. Monitors the container's network from outside. If suspicious connections are found, the container is killed and nothing is installed on your machine. If clean, artifacts are copied to your machine.
+
+```
+[fenceline] Sandbox: container abc123 started
+[fenceline] Sandbox: running npm install express inside container...
+[fenceline] Sandbox: install clean. Copying artifacts to host...
+[fenceline] Sandbox: done. Install verified and applied.
+```
+
+If something suspicious is found:
+```
+[fenceline] Sandbox: 1 suspicious connection(s) detected!
+  !! [CRITICAL] node -> 45.33.32.156:8080 — Non-standard port 8080
+[fenceline] Sandbox: BLOCKED — not installing on your machine.
+```
+
+**Without Docker (observational only — code runs on your machine):**
 
 ```bash
 fenceline install npm install express
 ```
 
-Monitors outbound connections scoped to the install process. Compares against the [deep map](map/) (known domains, CDN IP ranges, expected ports). Alerts on unknown IPs, non-443 ports, or unexpected CDN usage.
-
-Example output:
-```
-[fenceline] Monitoring network during: npm install express
-added 65 packages in 2s
-[fenceline] No unexpected network activity detected.
-```
-
-If something suspicious is found:
-```
-[fenceline] 1 network alert(s) during install:
-  !! [CRITICAL] node -> 45.33.32.156:8080 — Non-standard port 8080
-```
+Monitors outbound connections but cannot prevent execution. Use `--sandbox` when possible.
 
 ### `fenceline init` — install git hooks
 
@@ -207,16 +216,17 @@ Detection tools that use the map and other signals.
 | Behavioral layer for domain-reuse attacks (HTTP method/path analysis) | Planned |
 | Plugin system for community detection rules | Planned |
 
-### Phase 4: Sandboxed Install `v1.0 — the real goal`
+### Phase 4: Sandboxed Install `v0.4 — built, needs Docker testing`
 
 The current `fenceline install` monitors network on your machine — but by then, malicious code has already executed. The right approach is to **never run untrusted code on your machine at all.**
 
 | Deliverable | Status |
 |-------------|--------|
-| Sandboxed install via Docker container | Research |
-| Monitor container network from outside (not from inside) | Research |
-| If clean after X seconds → install on your machine | Research |
-| If suspicious → block and show what happened | Research |
+| `fenceline install --sandbox` via Docker container | Done (code + tests) |
+| Monitor container network from outside via `docker exec ss` | Done |
+| If clean → copy artifacts to host | Done |
+| If suspicious → kill container, block install, show alerts | Done |
+| End-to-end testing with Docker | Needs Docker environment |
 
 The idea: `fenceline install npm install sketchy-package` spins up a lightweight container, runs the install inside it, watches the container's network activity from the host, and only proceeds to install on your real machine if nothing suspicious happens. Your machine never touches untrusted code until it's been verified.
 

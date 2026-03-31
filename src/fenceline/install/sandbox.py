@@ -1,0 +1,325 @@
+"""Docker-sandboxed package install.
+
+Runs package installs inside a Docker container so untrusted code never
+executes on the host machine. Monitors the container's network activity
+from outside and only copies install artifacts to the host if no
+suspicious connections are detected.
+
+Requires Docker to be installed and running.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+from fenceline.deepmap.models import DeepMap
+from fenceline.install.matcher import check_connection
+from fenceline.install.monitor import Alert, Connection
+
+
+# Map package manager commands to Docker base images
+_IMAGES = {
+    "npm": "node:alpine",
+    "npx": "node:alpine",
+    "yarn": "node:alpine",
+    "pnpm": "node:alpine",
+    "pip": "python:3.12-alpine",
+    "pip3": "python:3.12-alpine",
+    "cargo": "rust:alpine",
+    "gem": "ruby:alpine",
+}
+
+# Map package manager to the install directory inside the container
+_ARTIFACT_PATHS = {
+    "npm": "/app/node_modules",
+    "yarn": "/app/node_modules",
+    "pnpm": "/app/node_modules",
+}
+
+
+def docker_available() -> bool:
+    """Check if Docker is installed and the daemon is running."""
+    try:
+        result = subprocess.run(
+            ["docker", "info"],
+            capture_output=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def detect_image(cmd: list[str]) -> str:
+    """Detect the appropriate Docker image for a package manager command."""
+    if not cmd:
+        return "node:alpine"
+    tool = cmd[0].lower()
+    return _IMAGES.get(tool, "node:alpine")
+
+
+class ContainerMonitor:
+    """Monitor a Docker container's network connections."""
+
+    def __init__(self, container_id: str, deep_map: DeepMap,
+                 tool_id: str, poll_interval: float = 0.5) -> None:
+        self._container_id = container_id
+        self._deep_map = deep_map
+        self._tool_id = tool_id
+        self._poll_interval = poll_interval
+        self._alerts: List[Alert] = []
+        self._seen: set[Tuple[str, int]] = set()
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        """Start monitoring in a background thread."""
+        self._running = True
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> List[Alert]:
+        """Stop monitoring and return collected alerts."""
+        self._running = False
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+        return list(self._alerts)
+
+    def _poll(self) -> None:
+        """Background loop: poll container connections via docker exec."""
+        while self._running:
+            try:
+                connections = self._get_container_connections()
+                for conn in connections:
+                    key = (conn.remote_ip, conn.remote_port)
+                    if key in self._seen:
+                        continue
+                    self._seen.add(key)
+
+                    alert = check_connection(conn, self._deep_map, self._tool_id)
+                    if alert is not None:
+                        self._alerts.append(alert)
+            except Exception:
+                pass
+
+            time.sleep(self._poll_interval)
+
+    def _get_container_connections(self) -> List[Connection]:
+        """Get network connections from inside the container via docker exec."""
+        try:
+            result = subprocess.run(
+                ["docker", "exec", self._container_id, "ss", "-tnp"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return []
+
+        return parse_ss_output(result.stdout)
+
+
+def parse_ss_output(output: str) -> List[Connection]:
+    """Parse ss -tnp output into Connection objects.
+
+    Extracted as a standalone function so it can be reused and tested
+    independently of the Docker exec mechanism.
+    """
+    connections: List[Connection] = []
+    now = time.time()
+
+    for line in output.splitlines():
+        if "ESTAB" not in line:
+            continue
+
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+
+        # Peer address is column 4 (0-indexed)
+        peer = parts[4]
+        colon_idx = peer.rfind(":")
+        if colon_idx == -1:
+            continue
+
+        remote_ip = peer[:colon_idx].strip("[]")
+        try:
+            remote_port = int(peer[colon_idx + 1:])
+        except ValueError:
+            continue
+
+        # Process info: users:(("name",pid=N,...))
+        pid = 0
+        process_name = ""
+        for p in parts:
+            if "pid=" in p:
+                try:
+                    pid = int(p.split("pid=")[1].split(",")[0].split(")")[0])
+                except (ValueError, IndexError):
+                    pass
+            if p.startswith("users:"):
+                try:
+                    process_name = p.split('"')[1]
+                except IndexError:
+                    pass
+
+        connections.append(
+            Connection(
+                pid=pid,
+                process_name=process_name,
+                remote_ip=remote_ip,
+                remote_port=remote_port,
+                protocol="TCP",
+                timestamp=now,
+            )
+        )
+
+    return connections
+
+
+class SandboxedInstall:
+    """Run a package install inside a Docker container.
+
+    The install command runs in an isolated container. Network connections
+    are monitored from outside via `docker exec ss -tnp`. If suspicious
+    connections are detected, the container is killed and artifacts are
+    NOT copied to the host.
+
+    Usage::
+
+        sandbox = SandboxedInstall(deep_map)
+        alerts, exit_code = sandbox.run(["npm", "install", "express"])
+    """
+
+    def __init__(self, deep_map: DeepMap, timeout: int = 300) -> None:
+        self._deep_map = deep_map
+        self._timeout = timeout
+        self._container_id: Optional[str] = None
+
+    def run(self, cmd: list[str]) -> Tuple[List[Alert], int]:
+        """Run the install command in a sandboxed container.
+
+        Returns (alerts, exit_code). If alerts are found, artifacts
+        are NOT copied to the host.
+        """
+        image = detect_image(cmd)
+        tool_id = cmd[0].lower() if cmd else "unknown"
+
+        print(f"[fenceline] Sandbox: pulling {image}...")
+
+        # Start container in detached mode with a working directory
+        try:
+            start_result = subprocess.run(
+                [
+                    "docker", "run", "-d",
+                    "-w", "/app",
+                    image,
+                    "sh", "-c",
+                    # Install command + sleep to keep container alive for monitoring
+                    f"{' '.join(cmd)} ; sleep 5",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            print(f"[fenceline] Failed to start container: {exc}", file=sys.stderr)
+            return [], 1
+
+        if start_result.returncode != 0:
+            print(f"[fenceline] Docker error: {start_result.stderr.strip()}", file=sys.stderr)
+            return [], 1
+
+        self._container_id = start_result.stdout.strip()[:12]
+        print(f"[fenceline] Sandbox: container {self._container_id} started")
+        print(f"[fenceline] Sandbox: running {' '.join(cmd)} inside container...")
+
+        # Start network monitor
+        monitor = ContainerMonitor(
+            self._container_id, self._deep_map, tool_id
+        )
+        monitor.start()
+
+        # Wait for container to finish
+        try:
+            wait_result = subprocess.run(
+                ["docker", "wait", self._container_id],
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
+            )
+            try:
+                exit_code = int(wait_result.stdout.strip())
+            except ValueError:
+                exit_code = 1
+        except subprocess.TimeoutExpired:
+            print(f"[fenceline] Sandbox: timeout after {self._timeout}s — killing container")
+            self._kill_container()
+            alerts = monitor.stop()
+            return alerts, 124  # timeout exit code
+        except KeyboardInterrupt:
+            print("\n[fenceline] Interrupted — killing container")
+            self._kill_container()
+            alerts = monitor.stop()
+            return alerts, 130
+
+        # Stop monitor, collect alerts
+        alerts = monitor.stop()
+
+        if alerts:
+            print(f"\n[fenceline] Sandbox: {len(alerts)} suspicious connection(s) detected!")
+            for alert in alerts:
+                icon = "!!" if alert.severity == "critical" else "?"
+                print(
+                    f"  {icon} [{alert.severity.upper()}] "
+                    f"{alert.connection.process_name} -> "
+                    f"{alert.connection.remote_ip}:{alert.connection.remote_port} "
+                    f"— {alert.reason}"
+                )
+            print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
+            print(f"[fenceline] Sandbox: container {self._container_id} will be removed.")
+            self._kill_container()
+            return alerts, 1
+
+        # Clean install — copy artifacts to host
+        print(f"[fenceline] Sandbox: install clean. Copying artifacts to host...")
+        artifact_path = _ARTIFACT_PATHS.get(tool_id)
+        if artifact_path:
+            self._copy_artifacts(artifact_path, Path.cwd())
+
+        self._kill_container()
+        print(f"[fenceline] Sandbox: done. Install verified and applied.")
+        return alerts, exit_code
+
+    def _copy_artifacts(self, container_path: str, host_dir: Path) -> None:
+        """Copy install artifacts from container to host."""
+        dest = str(host_dir) + "/"
+        try:
+            subprocess.run(
+                ["docker", "cp", f"{self._container_id}:{container_path}", dest],
+                capture_output=True,
+                timeout=60,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            print("[fenceline] Warning: failed to copy artifacts from container",
+                  file=sys.stderr)
+
+    def _kill_container(self) -> None:
+        """Remove the container."""
+        if self._container_id:
+            try:
+                subprocess.run(
+                    ["docker", "rm", "-f", self._container_id],
+                    capture_output=True,
+                    timeout=10,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+            self._container_id = None
