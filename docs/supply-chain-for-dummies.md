@@ -189,20 +189,39 @@ To make it permanent, add this to your `~/.zshrc` or `~/.bashrc`:
 export HOMEBREW_NO_ANALYTICS=1
 ```
 
-## Run All Checks at Once
+## Quick Posture Report
 
-We provide a script that checks all of the above automatically and gives you a report:
+Copy-paste this into your terminal to get an instant report of your project's supply chain security posture:
+
+```bash
+echo "=== Supply Chain Posture Report ===" && echo "" \
+&& echo "npm version: $(npm --version 2>/dev/null || echo 'not installed')" \
+&& echo "" \
+&& echo "--- Cooldown ---" \
+&& (grep -s "min-release-age" .npmrc ~/.npmrc 2>/dev/null && echo "PASS: min-release-age is set" || echo "FAIL: No cooldown set. Fix: npm config set min-release-age 7") \
+&& echo "" \
+&& echo "--- Install scripts ---" \
+&& (grep -s "ignore-scripts" .npmrc ~/.npmrc 2>/dev/null && echo "PASS: ignore-scripts is configured" || echo "FAIL: Install scripts unrestricted. Fix: npm config set ignore-scripts true") \
+&& echo "" \
+&& echo "--- Lockfile ---" \
+&& (ls package-lock.json yarn.lock pnpm-lock.yaml 2>/dev/null | head -1 | xargs -I{} echo "FOUND: {}" || echo "WARN: No lockfile found") \
+&& echo "" \
+&& echo "--- Provenance ---" \
+&& (npm audit signatures 2>/dev/null | head -3 || echo "SKIP: No npm project or npm not available") \
+&& echo "" \
+&& echo "--- Homebrew telemetry ---" \
+&& (brew analytics 2>/dev/null | head -1 || echo "SKIP: Homebrew not installed") \
+&& echo "" \
+&& echo "--- Sensitive files ---" \
+&& (grep -q "\.env" .gitignore 2>/dev/null && echo "PASS: .env in .gitignore" || echo "WARN: .env not in .gitignore") \
+&& echo "" \
+&& echo "=== Done ==="
+```
+
+For a more detailed report with color-coded output and fix instructions, use our full check script:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/Karmona/Fenceline/main/tools/quick-check.sh | bash
-```
-
-Or clone the repo and run it locally:
-
-```bash
-git clone https://github.com/Karmona/Fenceline.git
-cd Fenceline
-bash tools/quick-check.sh
 ```
 
 The script checks: cooldown settings, install script protection, lockfile tracking, registry auth, package provenance, Homebrew telemetry, and sensitive file protection. It produces a pass/fail report with specific fix instructions.
