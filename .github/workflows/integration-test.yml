@@ -13,6 +13,9 @@ on:
       - 'tests/test_sandbox.py'
   workflow_dispatch:  # manual trigger
 
+permissions:
+  contents: read
+
 jobs:
   sandbox-integration:
     runs-on: ubuntu-latest
