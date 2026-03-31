@@ -5,159 +5,156 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![v0.5.0](https://img.shields.io/badge/version-0.5.0-orange.svg)](CHANGELOG.md)
 
-**Sandboxed package installs. Untrusted code never runs on your machine.**
+**A dependency firewall for developer machines.**
 
-## Why
+Detonates package installs in a Docker sandbox and only promotes artifacts to your host if the network behavior is clean. Untrusted code never runs on your machine.
 
-In March 2026, the `axios` npm package was compromised with a RAT that beaconed to a command server every 60 seconds. The same month, the TeamPCP campaign hit security tools themselves — Trivy, Checkmarx, LiteLLM — stealing credentials from over a thousand developer systems. In September 2025, a single phishing email compromised 18 npm packages including `chalk` and `debug`, reaching 1 in 10 cloud environments in under 2 hours.
+## The Problem
 
-Every one of these attacks executed code on developer machines during `npm install` or `pip install`. By the time anyone noticed, the damage was done.
+In March 2026, the `axios` npm package was compromised with a RAT. The same month, the TeamPCP campaign hit Trivy, Checkmarx, and LiteLLM — stealing credentials from over a thousand systems. In 2025, the `chalk`/`debug` hijack reached 1 in 10 cloud environments in under 2 hours.
 
-**What if the install never ran on your machine in the first place?**
+Every one of these attacks ran code on developer machines during `npm install` or `pip install`. Other tools tell you a package is risky. **Fenceline makes it prove itself first.**
 
 ## How It Works
 
-```bash
-fenceline install --sandbox npm install <package>
+```
+fenceline install --sandbox npm install <pkg>
+
+┌──────────────────────────────────────────┐
+│ Docker Container (disposable)            │
+│                                          │
+│ Stage 1: npm install <pkg>               │
+│   → monitor all outbound connections     │
+│                                          │
+│ Stage 2: node -e "require('<pkg>')"      │
+│   → catch import-time payloads           │
+│                                          │
+│ Suspicious? → KILL. Nothing installed.   │
+│ Clean? → Copy node_modules to host.      │
+└──────────────────────────────────────────┘
 ```
 
+**Malicious package blocked:**
 ```
-┌─────────────────────────────────────────┐
-│ Docker Container (disposable)           │
-│                                         │
-│ Stage 1: npm install <pkg>              │
-│   → monitor all network connections     │
-│                                         │
-│ Stage 2: node -e "require('<pkg>')"     │
-│   → monitor again (catches import-time  │
-│     payloads like event-stream, chalk)  │
-│                                         │
-│ Suspicious? → KILL container.           │
-│ Clean? → copy node_modules to host.     │
-└─────────────────────────────────────────┘
-```
-
-Monitoring happens from **outside** the container. Your machine never touches untrusted code until it's been verified.
-
-**Suspicious package blocked:**
-```
-[fenceline] Sandbox: container ef3dec started
-[fenceline] Sandbox: running npm install sketchy-pkg inside container...
 [fenceline] Sandbox: 1 suspicious connection(s) in Stage 1 (install)!
   !! [CRITICAL] node -> 93.184.216.34:8080 — Non-standard port 8080
 [fenceline] Sandbox: BLOCKED — not installing on your machine.
 ```
 
-**Clean package verified and installed:**
+**Clean package verified:**
 ```
-[fenceline] Sandbox: container 3fb093 started
-[fenceline] Sandbox: running npm install is-odd inside container...
 [fenceline] Sandbox: Stage 2 — testing import of 'is-odd'...
 [fenceline] Sandbox: install clean. Copying artifacts to host...
 [fenceline] Sandbox: done. Install verified and applied.
 ```
 
-Both outputs above are from real Docker tests on macOS, not mockups.
+Both outputs above are from real Docker tests, not mockups.
 
-## What Else Fenceline Does
+## Zero-Friction Mode
 
-The sandbox is the core tool. These support it:
+Don't want to remember `fenceline install --sandbox`? Wrap your package manager:
 
-| Command | What it does |
-|---------|-------------|
-| `fenceline check` | Scan lockfile diffs for risky changes (package age, maintainer changes, missing provenance). Supports npm + PyPI. |
-| `fenceline audit-actions` | Scan GitHub Actions workflows for unpinned tags — the attack vector used by TeamPCP to compromise Trivy and Checkmarx. |
-| `fenceline init` | Install git hooks that auto-run `fenceline check` on lockfile changes. |
-| `tools/quick-check.sh` | One-command security posture report. No install needed. |
+```bash
+fenceline wrap --enable
+```
 
-## Knowledge Base
+Now `npm install express` automatically goes through the Docker sandbox. Non-install commands (`npm test`, `npm run`, etc.) pass through unchanged.
 
-| Resource | What's there |
-|----------|-------------|
-| [Exploit Case Studies](exploits/) | 11 real attacks (2018-2026) with IOCs, timelines, and honest sandbox assessments |
-| [Deep Map](map/) | Expected network behavior for 8 package managers — domains, IPs, ASNs, CDNs, TLS certs. Powers the sandbox detection engine. |
-| [Defense Playbook](docs/playbook.md) | Practical security steps organized by role (npm user, Python user, publisher, CI/CD) |
-| [Supply Chain for Developers](docs/supply-chain-for-dummies.md) | Plain-English explainer + 5-minute security checklist |
-| [Tools Landscape](docs/landscape.md) | Every supply chain security tool we know about, with honest assessments |
-| [Newsroom](docs/newsroom.md) | Latest incidents and defenses |
+```bash
+fenceline wrap --status    # see what's wrapped
+fenceline wrap --disable   # restore originals
+```
 
 ## Quick Start
 
-**Quick posture check (clone the repo first):**
-```bash
-cd Fenceline
-bash tools/quick-check.sh
-```
-
-**Install the CLI (requires Python 3.9+):**
 ```bash
 git clone https://github.com/Karmona/Fenceline.git
 cd Fenceline
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
-```
 
-**Run a sandboxed install (requires Docker):**
-```bash
+# Sandboxed install (requires Docker)
 fenceline install --sandbox npm install express
+
+# Or wrap npm permanently
+fenceline wrap --enable
+npm install express    # now sandboxed automatically
 ```
 
-**Scan lockfile for risky changes:**
-```bash
-fenceline check
-```
+## Other Tools
 
-**Audit GitHub Actions:**
-```bash
-fenceline audit-actions
-```
+| Command | What it does |
+|---------|-------------|
+| `fenceline check` | Scan lockfile diffs for risky changes — package age, maintainer changes, missing provenance. npm + PyPI (experimental). |
+| `fenceline audit-actions` | Scan GitHub Actions for unpinned tags. The TeamPCP attack force-pushed Trivy's tags. |
+| `fenceline init` | Git hooks that auto-run `fenceline check` on lockfile changes. |
+| `tools/quick-check.sh` | One-command security posture report. No install needed. |
 
 ## Against Real Attacks
 
-Based on our analysis of 11 real supply chain attacks. These are theoretical assessments — not proven in-the-wild detections. See [exploits/](exploits/) for details on each.
+Theoretical assessments — not proven in-the-wild. See [exploits/](exploits/) for detailed analysis.
 
-| Attack | Year | Sandbox assessment |
-|--------|------|--------------------|
-| Axios RAT | 2026 | **Would block** — C2 beacon on non-standard port |
-| TeamPCP: LiteLLM | 2026 | **Would block** — Stage 2 import triggers .pth credential harvesting |
-| chalk/debug | 2025 | **Would block** — Stage 2 import triggers C2 connection |
-| Nx/s1ngularity | 2025 | Partial — exfils via legitimate domain, needs HTTP method analysis |
-| Ultralytics | 2024 | **Would block** — mining pool on non-standard port |
+| Attack | Year | Sandbox |
+|--------|------|---------|
+| Axios RAT | 2026 | **Would block** — C2 on port 8000 |
+| TeamPCP: LiteLLM | 2026 | **Would block** — Stage 2 catches .pth payload |
+| chalk/debug | 2025 | **Would block** — Stage 2 catches import C2 |
+| Nx/s1ngularity | 2025 | Partial — exfils via legitimate domain |
+| Ultralytics | 2024 | **Would block** — mining pool on port 8080 |
 | ua-parser-js | 2021 | **Would block** — postinstall phones home |
-| event-stream | 2018 | **Would block** — Stage 2 import triggers payload |
-| XZ Utils | 2024 | **Contained** — passive backdoor, no network, but isolated in container |
-| colors.js | 2022 | **Contained** — logic bomb, no network, but damage limited to container |
-| Codecov | 2021 | Outside scope — CI/CD tool, not a package install |
-| Polyfill.io | 2024 | Outside scope — client-side CDN, not a package install |
+| event-stream | 2018 | **Would block** — Stage 2 catches import payload |
+| colors.js | 2022 | **Contained** — no network, but isolated in container |
+| XZ Utils | 2024 | **Contained** — passive backdoor, isolated |
+| Codecov | 2021 | Outside scope — CI/CD tool |
+| Polyfill.io | 2024 | Outside scope — client-side CDN |
 
-7 would be blocked. 2 would be contained. 2 are outside scope. No single tool catches everything — the sandbox catches attacks that phone home during install or import.
+7 blocked. 2 contained. 2 outside scope.
 
-## What the Sandbox Does NOT Catch
+## What This Does NOT Catch
 
-Being honest about limitations:
+- Attacks with no network activity (logic bombs, sabotage)
+- CI/CD pipeline attacks (use `fenceline audit-actions` for Actions)
+- Code that only activates after being copied to host without network
+- Exfiltration via legitimate domains without HTTP analysis (future work)
+- Steganographic payloads (.WAV files, etc.)
 
-- **Attacks with no network activity** (colors.js logic bomb, XZ Utils passive backdoor) — the sandbox contains them but cannot detect them
-- **CI/CD pipeline attacks** (TeamPCP Trivy/Checkmarx tag tampering) — use `fenceline audit-actions` and SHA-pinned actions instead
-- **Client-side attacks** (Polyfill.io domain takeover) — not a package install
-- **Sophisticated evasion** (code that only activates after being copied to host, or steganographic payloads like TeamPCP Telnyx) — future work: file system diffing
-- **Exfiltration via legitimate domains** (Nx using api.github.com) — future work: HTTP method analysis
+## Knowledge Base
+
+| Resource | Description |
+|----------|-------------|
+| [11 Exploit Case Studies](exploits/) | Real attacks with IOCs, timelines, sandbox assessments |
+| [Deep Map](map/) | Network fingerprints for 8 package managers (powers the detection engine) |
+| [Defense Playbook](docs/playbook.md) | Practical steps by role |
+| [Tools Landscape](docs/landscape.md) | Every supply chain tool, honestly assessed |
+| [Newsroom](docs/newsroom.md) | Latest incidents and defenses |
+| [Supply Chain Guide](docs/supply-chain-for-dummies.md) | Plain-English explainer |
+
+## Scope and Focus
+
+Fenceline is optimized for **install-time and import-time network behavior on developer machines**. It is not a general-purpose package malware detector.
+
+- **Node.js** (npm, yarn, pnpm): Fully supported — sandbox + artifact copy
+- **Python** (pip): Experimental — sandbox monitoring works, artifact copy is limited
+- **Others**: Network monitoring works, but no artifact handling yet
+
+See [docs/landscape.md](docs/landscape.md) for how Fenceline fits alongside Socket, Aikido, Phylum, OpenSSF, StepSecurity, and others.
 
 ## Roadmap
 
 | Phase | Status | What |
 |-------|--------|------|
-| Knowledge Base | Done | 11 exploits, deep map, playbook, landscape, newsroom |
-| CLI Tools | Done | `check`, `install`, `init`, `audit-actions`. 83 tests. |
-| Sandbox | Done | Docker isolation, 2-stage monitoring, verified with real Docker |
-| Next | Planned | File system diffing, HTTP method analysis, PyPI distribution |
+| Knowledge Base | Done | 11 exploits, deep map, playbook, landscape |
+| CLI Tools | Done | check, install, init, audit-actions, wrap. 83 tests. |
+| Sandbox | Done | Docker isolation, 2-stage monitoring, verified end-to-end |
+| Next | Planned | File system diffing, HTTP method analysis, CI enforcement, structured JSON output |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Add exploit case studies, improve the map, build detection tools, or fix docs.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Disclaimer
 
-Fenceline is a community-driven, best-effort project provided "AS IS" without warranty. **It does NOT guarantee protection against any attack.** See [DISCLAIMER.md](DISCLAIMER.md).
+Best-effort, community-driven. **Does NOT guarantee protection against any attack.** See [DISCLAIMER.md](DISCLAIMER.md).
 
 ## License
 

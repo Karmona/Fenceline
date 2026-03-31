@@ -88,8 +88,9 @@ class NetworkMonitor:
                     if alert is not None:
                         self._alerts.append(alert)
 
-            except Exception:
-                pass  # Don't crash the monitor on transient errors
+            except Exception as exc:
+                import sys
+                print(f"[fenceline] Warning: monitor poll error: {exc}", file=sys.stderr)
 
             time.sleep(self._poll_interval)
 

@@ -114,16 +114,17 @@ def load_maps(map_dir: Optional[Path] = None) -> DeepMap:
         for yaml_file in sorted(tools_dir.glob("*.yaml")):
             try:
                 tools.append(load_tool(yaml_file))
-            except Exception:
-                # Skip files that fail to parse
-                pass
+            except Exception as exc:
+                import sys
+                print(f"[fenceline] Warning: failed to parse {yaml_file.name}: {exc}", file=sys.stderr)
 
     cdns_dir = map_dir / "cdns"
     if cdns_dir.is_dir():
         for yaml_file in sorted(cdns_dir.glob("*.yaml")):
             try:
                 cdns.append(load_cdn(yaml_file))
-            except Exception:
-                pass
+            except Exception as exc:
+                import sys
+                print(f"[fenceline] Warning: failed to parse {yaml_file.name}: {exc}", file=sys.stderr)
 
     return DeepMap(tools=tools, cdns=cdns)

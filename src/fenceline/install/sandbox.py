@@ -25,22 +25,31 @@ from fenceline.install.monitor import Alert, Connection
 
 
 # Map package manager commands to Docker base images
+# Node.js ecosystem is fully supported. Others are experimental.
 _IMAGES = {
+    # Fully supported
     "npm": "node:alpine",
     "npx": "node:alpine",
     "yarn": "node:alpine",
     "pnpm": "node:alpine",
+    # Experimental — monitoring works but artifact copy is limited
     "pip": "python:3.12-alpine",
     "pip3": "python:3.12-alpine",
     "cargo": "rust:alpine",
     "gem": "ruby:alpine",
 }
 
-# Map package manager to the install directory inside the container
+_EXPERIMENTAL_TOOLS = {"pip", "pip3", "cargo", "gem"}
+
+# Map package manager to the install directory inside the container.
+# Only Node.js has a clean artifact path. Python installs into
+# site-packages which varies by version and virtualenv setup.
 _ARTIFACT_PATHS = {
     "npm": "/app/node_modules",
     "yarn": "/app/node_modules",
     "pnpm": "/app/node_modules",
+    # pip: no artifact copy — install is verified but user must
+    # re-run pip install on host after sandbox passes
 }
 
 
@@ -342,6 +351,11 @@ class SandboxedInstall:
         tool_id = cmd[0].lower() if cmd else "unknown"
         monitor_secs = self._monitor_seconds
 
+        if tool_id in _EXPERIMENTAL_TOOLS:
+            print(f"[fenceline] Note: {tool_id} sandbox support is experimental.", file=sys.stderr)
+            print(f"[fenceline] Network monitoring works but artifact copy is limited.", file=sys.stderr)
+            print(f"[fenceline] If clean, re-run '{' '.join(cmd)}' on host to install.", file=sys.stderr)
+
         print(f"[fenceline] Sandbox: pulling {image}...")
 
         # Start container — run the command, then keep alive for monitoring
@@ -352,11 +366,11 @@ class SandboxedInstall:
                     "-w", "/app",
                     image,
                     "sh", "-c",
-                    # Quote each argument to prevent shell interpretation of
-                    # special characters (semicolons, quotes, etc.) in the
-                    # user's command. Without this, JS code like
-                    # node -e "require('net');..." gets split on ';' by sh.
-                    f"{' '.join(shlex.quote(c) for c in cmd)} ; sleep {monitor_secs}",
+                    # Quote each argument to prevent shell interpretation.
+                    # Capture the install exit code BEFORE sleeping, then
+                    # exit with that code. Without this, a failed install
+                    # returns 0 because sleep is the last command.
+                    f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; sleep {monitor_secs} ; exit $FENCELINE_EXIT",
                 ],
                 capture_output=True,
                 text=True,

@@ -18,6 +18,11 @@ def _cmd_install(args: argparse.Namespace) -> int:
     return run(args)
 
 
+def _cmd_wrap(args: argparse.Namespace) -> int:
+    from .wrap import run
+    return run(args)
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     from .init.hooks import run
     return run(args)
@@ -116,6 +121,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--verbose", "-v", action="store_true", help="Show all findings including skipped"
     )
     audit_actions_parser.set_defaults(func=_cmd_audit_actions)
+
+    # -- wrap --
+    wrap_parser = subparsers.add_parser(
+        "wrap",
+        help="Install shell wrappers so npm/yarn/pnpm automatically use the sandbox",
+    )
+    wrap_parser.add_argument(
+        "--enable", action="store_true",
+        help="Install wrappers (npm install → sandboxed install)",
+    )
+    wrap_parser.add_argument(
+        "--disable", action="store_true",
+        help="Remove wrappers (restore original commands)",
+    )
+    wrap_parser.add_argument(
+        "--status", action="store_true",
+        help="Show which tools are currently wrapped",
+    )
+    wrap_parser.set_defaults(func=_cmd_wrap)
 
     return parser
 

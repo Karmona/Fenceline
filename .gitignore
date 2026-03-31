@@ -28,3 +28,4 @@ node_modules/
 # Testing output
 testing/reports/*.md
 !testing/reports/template.md
+tmp/
