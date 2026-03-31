@@ -84,17 +84,19 @@ Package managers now support delaying installation of newly published versions. 
 
 Pick your package manager and run one command (sets a 7-day cooldown, value in minutes):
 
-**npm** (v11+):
+**npm** (v11.10+) — value is in **days**:
 ```bash
-npm config set minimum-release-age 10080
+npm config set min-release-age 7
 ```
 
-**pnpm** (v10.16+):
+Note: there is a [known bug](https://github.com/npm/cli/issues/9005) with `~` version ranges. If you hit errors, pin exact versions for now.
+
+**pnpm** (v10.16+) — value is in **minutes** (10080 = 7 days):
 ```bash
 pnpm config set minimumReleaseAge 10080
 ```
 
-**Yarn** (v4.10+) — no CLI command, add this line to `.yarnrc.yml`:
+**Yarn** (v4.10+) — add this line to `.yarnrc.yml`:
 ```yaml
 npmMinimalAgeGate: 10080
 ```

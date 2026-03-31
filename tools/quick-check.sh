@@ -41,7 +41,7 @@ echo "   time to spot malicious releases before they reach your machine."
 echo ""
 
 if [ -f "pnpm-workspace.yaml" ] || [ -f "pnpm-lock.yaml" ]; then
-    if grep -q "minimumReleaseAge" pnpm-workspace.yaml 2>/dev/null || grep -q "minimum-release-age" .npmrc 2>/dev/null; then
+    if grep -q "minimumReleaseAge" pnpm-workspace.yaml 2>/dev/null || grep -q "min-release-age" .npmrc 2>/dev/null; then
         pass "pnpm minimumReleaseAge is configured"
     else
         fail "pnpm detected but minimumReleaseAge is not set"
@@ -55,17 +55,17 @@ elif [ -f ".yarnrc.yml" ]; then
         echo "        Fix: Add 'npmMinimalAgeGate: 10080' to .yarnrc.yml"
     fi
 elif [ -f "package-lock.json" ] || [ -f "package.json" ]; then
-    if grep -q "minimum-release-age" .npmrc 2>/dev/null; then
-        pass "npm minimum-release-age is configured"
+    if grep -q "min-release-age" .npmrc 2>/dev/null; then
+        pass "npm min-release-age is configured"
     else
         NPM_VERSION=$(npm --version 2>/dev/null || echo "0")
         NPM_MAJOR=$(echo "$NPM_VERSION" | cut -d. -f1)
         if [ "$NPM_MAJOR" -ge 11 ] 2>/dev/null; then
-            fail "npm $NPM_VERSION detected but minimum-release-age is not set"
-            echo "        Fix: Add 'minimum-release-age=10080' to your .npmrc file"
+            fail "npm $NPM_VERSION detected but min-release-age is not set"
+            echo "        Fix: Add 'min-release-age=7' to your .npmrc file"
         else
-            warn "npm $NPM_VERSION does not support minimum-release-age (requires v11+)"
-            echo "        Fix: Update npm with 'npm install -g npm@latest', then add 'minimum-release-age=10080' to .npmrc"
+            warn "npm $NPM_VERSION does not support min-release-age (requires v11+)"
+            echo "        Fix: Update npm with 'npm install -g npm@latest', then add 'min-release-age=7' to .npmrc"
         fi
     fi
 elif [ -f "Pipfile.lock" ] || [ -f "requirements.txt" ]; then
