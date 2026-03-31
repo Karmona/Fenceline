@@ -3,7 +3,7 @@
 # Fenceline Test: Outbound Data Exfiltration
 # =============================================================================
 # Simulates: Data exfiltration via outbound HTTP connection during install
-# Real-world examples: event-stream (2018), Codecov (2021), Axios (2023)
+# Real-world examples: event-stream (2018), Codecov (2021), Axios (2026)
 #
 # Attack pattern:
 #   1. Package installs normally

@@ -26,7 +26,7 @@ Most developers have no idea what their dependencies do at the network level. Su
 
 ### Learn
 
-Detailed case studies of real supply chain attacks — what happened, how it worked, what we can learn from each one, and whether our tools would have caught it.
+Detailed case studies of real supply chain attacks — what happened, how it worked, what we can learn from each one, and whether our approach could have helped detect it.
 
 - [Exploit Case Studies](exploits/) — 10 major attacks analyzed in detail
 - [Supply Chain for Developers](docs/supply-chain-for-dummies.md) — plain-English explainer
@@ -38,15 +38,16 @@ The Deep Map — infrastructure fingerprints of every major package manager's ex
 
 - [The Deep Map](map/) — expected network behavior for 8 package managers
 - **Key insight:** No package manager should EVER upload data during install. Any upload = suspicious.
-- **Validation:** This map would have caught 7 out of 10 major supply chain attacks.
+- **Validation:** Based on our analysis, this map could have detected anomalous network behavior in 7 out of 10 major attacks we studied. See [exploits/](exploits/) for details.
 
 ### Defend
 
 Tools that use the map and other signals to detect anomalies.
 
-- `fenceline check` — scan lockfile diffs for risky dependency changes
-- `fenceline install` — monitor network connections during package installs
+- `fenceline check` — scan lockfile diffs for risky dependency changes *(planned)*
+- `fenceline install` — monitor network connections during package installs *(planned)*
 - [Testing](testing/) — safe simulations of attack patterns
+- [Quick posture check script](tools/quick-check.sh) — checks your project's security settings now
 
 ### Landscape
 
@@ -83,6 +84,59 @@ cat map/tools/npm.yaml
 # Run attack simulations (safe, uses localhost only)
 cd testing && ./harness.sh
 ```
+
+## Roadmap
+
+We're building this in the open. Here's where we are and where we're going.
+
+### Phase 1: Knowledge Base `v0.1 — in progress`
+
+Build the educational foundation. Make the repo valuable before writing any tool code.
+
+| Deliverable | Status |
+|-------------|--------|
+| Exploit case studies (10 real attacks) | Done |
+| Deep Map (8 package managers, 4 CDNs) | Done |
+| Supply chain explainer for developers | Done |
+| Tools landscape directory | Done |
+| Newsroom (ongoing incidents + defenses) | Done |
+| Quick posture check script | Done |
+| 5-minute security checklist with tested commands | Done |
+| Attack simulation test harness | Done |
+
+### Phase 2: CLI Tools `planned`
+
+Build detection tools that use the map and other signals.
+
+| Deliverable | Status |
+|-------------|--------|
+| `fenceline check` — lockfile diff scanner (package age, maintainer changes, new capabilities, provenance) | Planned |
+| `fenceline install` — install-time network monitor (compare connections against deep map) | Planned |
+| `fenceline init` — git hooks for auto-checking on lockfile changes | Planned |
+| Integrate with OpenSSF Scorecard API + deps.dev | Planned |
+| pip install distribution | Planned |
+
+### Phase 3: CI/CD Integration `planned`
+
+Make it run automatically on every PR.
+
+| Deliverable | Status |
+|-------------|--------|
+| GitHub Action — PR comments with risk report | Planned |
+| Plugin system for community detection rules | Planned |
+| Sigstore provenance verification | Planned |
+| Behavioral layer for domain-reuse attacks (HTTP method/path analysis) | Planned |
+
+### Phase 4: Expand `future`
+
+| Deliverable | Status |
+|-------------|--------|
+| Cross-ecosystem capability analysis (Capslock-style, beyond Go) | Research |
+| Slopsquatting detector (AI-hallucinated package names) | Research |
+| Swift/Xcode ecosystem support (SPM, CocoaPods) | Research |
+| Pre-install behavioral sandbox | Research |
+
+Want to help with any of these? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contributing
 

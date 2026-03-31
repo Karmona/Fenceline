@@ -209,8 +209,10 @@ echo "=== Supply Chain Posture Report ===" && echo "" \
 For a more detailed report with color-coded output and fix instructions, use our full check script:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/Karmona/Fenceline/main/tools/quick-check.sh | bash
+curl -sL https://raw.githubusercontent.com/Karmona/Fenceline/main/tools/quick-check.sh -o quick-check.sh && cat quick-check.sh && bash quick-check.sh
 ```
+
+(Yes, we download-then-inspect instead of `curl | bash` — this is a supply chain security guide.)
 
 ## Where to Learn More
 

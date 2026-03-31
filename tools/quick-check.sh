@@ -65,7 +65,7 @@ elif [ -f "package-lock.json" ] || [ -f "package.json" ]; then
             echo "        Fix: Add 'min-release-age=7' to your .npmrc file"
         else
             warn "npm $NPM_VERSION does not support min-release-age (requires v11+)"
-            echo "        Fix: Update npm with 'npm install -g npm@latest', then add 'min-release-age=7' to .npmrc"
+            echo "        Fix: Update npm to v11+ (npm install -g npm@11.12.1), then add 'min-release-age=7' to .npmrc"
         fi
     fi
 elif [ -f "Pipfile.lock" ] || [ -f "requirements.txt" ]; then
