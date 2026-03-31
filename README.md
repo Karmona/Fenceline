@@ -190,7 +190,7 @@ Detection tools that use the map and other signals.
 | [`fenceline check`](src/fenceline/check/) — lockfile diff scanner (package age, maintainer changes, capabilities, provenance) | Done |
 | [`fenceline install`](src/fenceline/install/) — install-time network monitor (compare connections against deep map) | Done |
 | [`fenceline init`](src/fenceline/init/) — git hooks for auto-checking on lockfile changes | Done |
-| [25 automated tests](tests/) | Done |
+| [25 automated tests](tests/) + [CI on every push](.github/workflows/ci.yml) | Done |
 | pip install distribution (`pip install -e .`) | Done |
 | Integrate with OpenSSF Scorecard API | Planned |
 

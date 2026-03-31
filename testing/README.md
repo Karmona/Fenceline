@@ -89,13 +89,15 @@ These are the attack patterns our tools cannot currently detect. Each gap is a t
 | Very short-lived connections | Polling every 500ms can miss sub-500ms connections | Theoretical | eBPF or dtrace for kernel-level capture |
 | DNS exfiltration | Data encoded in DNS queries (long subdomains) | Various | DNS query monitoring |
 
-### Gaps in both tools
+### Partially addressed
 
-| Gap | Why | What's needed |
-|-----|-----|---------------|
-| Non-npm ecosystems | Only npm is fully supported | Extend lockfile parser for pip, cargo, yarn, pnpm |
-| CI/CD pipeline attacks | Tools run locally, not in CI | GitHub Action (action.yml is ready, needs testing) |
-| Supply chain attacks via GitHub Actions | Compromised actions, not packages | Action pinning verification |
+These have some coverage but aren't complete:
+
+| Gap | Current status | What's needed to close it |
+|-----|---------------|---------------------------|
+| Non-npm ecosystems | `fenceline install` monitors any command; `fenceline check` parses npm lockfiles only | Lockfile parsers for pip, cargo, yarn, pnpm |
+| CI/CD integration | [GitHub Action](../action/action.yml) is defined but not yet tested in production | End-to-end testing on real PRs |
+| Supply chain attacks via GitHub Actions | Not addressed | Action pinning verification tool |
 
 ## Testing the Tools Against Simulations
 
