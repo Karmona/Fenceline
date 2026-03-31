@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 from pathlib import Path
+from ipaddress import IPv6Network
 from typing import List, Optional
 
 import yaml
@@ -79,11 +80,19 @@ def load_cdn(path: Path) -> CDNMap:
             # Skip malformed entries
             pass
 
+    v6_prefixes: List[ipaddress.IPv6Network] = []
+    for cidr in data.get("ipv6_prefixes", []):
+        try:
+            v6_prefixes.append(ipaddress.IPv6Network(cidr, strict=False))
+        except (ValueError, TypeError):
+            pass
+
     return CDNMap(
         id=data.get("id", path.stem),
         name=data.get("name", ""),
         asn=data.get("asn", ""),
         ipv4_prefixes=prefixes,
+        ipv6_prefixes=v6_prefixes,
     )
 
 

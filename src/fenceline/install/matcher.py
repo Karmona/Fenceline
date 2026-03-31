@@ -44,6 +44,11 @@ def check_connection(
             if addr in prefix:
                 matched_cdn = cdn
                 break
+        if matched_cdn is None:
+            for prefix in getattr(cdn, 'ipv6_prefixes', []):
+                if addr in prefix:
+                    matched_cdn = cdn
+                    break
         if matched_cdn is not None:
             break
 

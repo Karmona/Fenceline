@@ -35,6 +35,14 @@ primary_domains:
     asn: AS13335
     port: 443
 
+tls_certificates:
+  registry.npmjs.org:
+    sha256: "7D:D1:5E:69:E7:6B:99:42:EA:EA:2C:EB:A5:99:F8:84:8B:F5:81:D3:62:46:8B:E6:EA:60:2B:44:8C:6D:25:53"
+    issuer: "Google Trust Services / WE1"
+    valid_from: "2026-02-27"
+    valid_until: "2026-05-28"
+    observed: "2026-03-31"
+
 provenance_domains:
   - domain: fulcio.sigstore.dev
     purpose: "Sigstore certificate authority (npm provenance verification)"

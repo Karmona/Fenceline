@@ -36,6 +36,20 @@ primary_domains:
     asn: AS54113
     port: 443
 
+tls_certificates:
+  crates.io:
+    sha256: "C9:42:14:41:D1:10:9C:F5:AA:0E:A1:5F:85:1C:F7:1C:02:BD:08:20:85:7F:C4:0F:EE:11:75:68:45:C3:70:E2"
+    issuer: "Amazon RSA 2048 M04"
+    valid_from: "2026-01-16"
+    valid_until: "2027-02-14"
+    observed: "2026-03-31"
+  static.crates.io:
+    sha256: "55:C0:D3:6F:5E:32:FE:E9:33:CA:90:1F:8F:83:23:54:6B:DB:4E:2A:8A:55:53:E2:97:71:53:BF:54:1E:37:9F"
+    issuer: "GlobalSign Atlas R3 DV TLS CA 2025 Q3"
+    valid_from: "2025-09-03"
+    valid_until: "2026-10-05"
+    observed: "2026-03-31"
+
 port: 443
 uploads_during_install: false
 

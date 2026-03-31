@@ -42,6 +42,14 @@ primary_domains:
     asn: AS54113
     port: 443
 
+tls_certificates:
+  rubygems.org:
+    sha256: "DD:93:EA:BE:2C:61:21:83:AB:C9:F5:8C:B2:0F:95:DD:48:E0:7D:3E:15:E8:8F:EF:6A:98:76:27:15:57:82:4F"
+    issuer: "GlobalSign Atlas R3 DV TLS CA 2026 Q1"
+    valid_from: "2026-02-05"
+    valid_until: "2027-03-09"
+    observed: "2026-03-31"
+
 port: 443
 uploads_during_install: false
 

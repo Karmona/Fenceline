@@ -26,6 +26,7 @@ def _make_deep_map() -> DeepMap:
         name="Cloudflare",
         asn="AS13335",
         ipv4_prefixes=[ipaddress.IPv4Network("104.16.0.0/16")],
+        ipv6_prefixes=[ipaddress.IPv6Network("2606:4700::/32")],
     )
     tool = ToolMap(
         id="npm",
@@ -100,3 +101,30 @@ class TestCDNMatching:
         assert alert.severity == "warning"
         assert "Akamai" in alert.reason
         assert "npm" in alert.reason
+
+
+class TestIPv6Matching:
+    """IPv6 address matching tests."""
+
+    def test_ipv6_in_known_range_returns_none(self):
+        deep_map = _make_deep_map()
+        conn = _make_connection("2606:4700::6810:722")
+        alert = check_connection(conn, deep_map, "npm")
+
+        assert alert is None
+
+    def test_ipv6_outside_range_returns_warning(self):
+        deep_map = _make_deep_map()
+        conn = _make_connection("2001:db8::1")
+        alert = check_connection(conn, deep_map, "npm")
+
+        assert alert is not None
+        assert alert.severity == "warning"
+
+    def test_ipv6_non_standard_port_is_critical(self):
+        deep_map = _make_deep_map()
+        conn = _make_connection("2606:4700::6810:722", remote_port=8080)
+        alert = check_connection(conn, deep_map, "npm")
+
+        assert alert is not None
+        assert alert.severity == "critical"

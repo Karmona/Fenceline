@@ -1,0 +1,67 @@
+name: Map Freshness Check
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9am UTC
+  workflow_dispatch:
+
+jobs:
+  check-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check registry DNS
+        id: dns
+        run: |
+          CHANGES=""
+
+          # Check each registry domain
+          for domain in registry.npmjs.org pypi.org files.pythonhosted.org crates.io static.crates.io index.crates.io rubygems.org api.rubygems.org proxy.golang.org sum.golang.org formulae.brew.sh ghcr.io packagist.org repo.packagist.org; do
+            CURRENT_IPS=$(dig +short "$domain" | sort | tr '\n' ',')
+            echo "$domain: $CURRENT_IPS"
+
+            # Check if any IPs changed vs what's in the yaml
+            # (Simple approach: just record current state)
+            echo "$domain=$CURRENT_IPS" >> "$RUNNER_TEMP/dns-check.txt"
+          done
+
+          # Also check TLS certs
+          for domain in registry.npmjs.org pypi.org crates.io rubygems.org proxy.golang.org; do
+            EXPIRY=$(echo | openssl s_client -connect "$domain:443" -servername "$domain" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            echo "TLS $domain: expires $EXPIRY"
+            echo "tls_$domain=$EXPIRY" >> "$RUNNER_TEMP/dns-check.txt"
+          done
+
+          cat "$RUNNER_TEMP/dns-check.txt"
+
+      - name: Create issue if certs expiring soon
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const data = fs.readFileSync(process.env.RUNNER_TEMP + '/dns-check.txt', 'utf8');
+            const lines = data.split('\n').filter(l => l.startsWith('tls_'));
+
+            let expiringSoon = [];
+            const now = new Date();
+            const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+
+            for (const line of lines) {
+              const [key, val] = line.split('=');
+              const domain = key.replace('tls_', '');
+              const expiry = new Date(val);
+              if (expiry - now < thirtyDays) {
+                expiringSoon.push(`- **${domain}**: expires ${val}`);
+              }
+            }
+
+            if (expiringSoon.length > 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `[Map] TLS certificates expiring soon`,
+                body: `The following registry TLS certificates expire within 30 days:\n\n${expiringSoon.join('\n')}\n\nUpdate the fingerprints in \`map/tools/\` after the certificates renew.\n\nThis issue was created automatically by the map freshness check.`,
+                labels: ['map', 'data']
+              });
+            }

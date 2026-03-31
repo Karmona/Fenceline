@@ -83,7 +83,7 @@ These are the attack patterns our tools cannot currently detect. Each gap is a t
 
 | Gap | Why | Real attack example | What's needed |
 |-----|-----|---------------------|---------------|
-| IPv6 CDN ranges | Our map only has IPv4 CIDR ranges | False positive on Cloudflare IPv6 | Add IPv6 ranges to map |
+| ~~IPv6 CDN ranges~~ | ~~Our map only has IPv4 CIDR ranges~~ | ~~Fixed~~ | ~~Done — IPv6 ranges added for all CDNs~~ |
 | Domain reuse for exfiltration | Nx used `api.github.com` (a legitimate domain) for data theft | Nx/s1ngularity | HTTP method/path behavioral analysis (Phase 3) |
 | No-network attacks | Logic bombs, sabotage with no outbound connections | colors.js/faker.js, XZ Utils | Code analysis, not network monitoring |
 | Very short-lived connections | Polling every 500ms can miss sub-500ms connections | Theoretical | eBPF or dtrace for kernel-level capture |

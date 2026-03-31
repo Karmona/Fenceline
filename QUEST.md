@@ -48,7 +48,7 @@ Progress: ██████░░░░ 7/10 attacks detectable with infrastruc
 - [x] CLI: `fenceline init` (git hooks)
 - [x] GitHub Action definition
 - [x] Test harness with attack simulations
-- [x] 25 automated tests (lockfile, scoring, monitor, matcher)
+- [x] 35 automated tests (lockfile, scoring, monitor, matcher)
 - [ ] OpenSSF Scorecard API integration
 - [ ] Plugin system for community detection rules
 - [ ] First external community contribution

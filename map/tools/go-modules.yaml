@@ -47,6 +47,14 @@ primary_domains:
       This is an UNDOCUMENTED dependency -- domain allowlists MUST
       include storage.googleapis.com for Go modules to work.
 
+tls_certificates:
+  proxy.golang.org:
+    sha256: "8E:A9:A8:B3:90:65:71:66:2C:CD:33:92:74:7F:99:EC:5F:57:13:49:15:9F:6E:54:59:ED:22:72:3A:41:00:F0"
+    issuer: "Google Trust Services / WR2"
+    valid_from: "2026-03-09"
+    valid_until: "2026-06-01"
+    observed: "2026-03-31"
+
 port: 443
 uploads_during_install: false
 

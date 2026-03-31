@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 from dataclasses import dataclass, field
+from ipaddress import IPv4Network, IPv6Network
 from typing import List, Optional
 
 
@@ -45,6 +46,7 @@ class CDNMap:
     name: str = ""
     asn: str = ""
     ipv4_prefixes: List[ipaddress.IPv4Network] = field(default_factory=list)
+    ipv6_prefixes: List[ipaddress.IPv6Network] = field(default_factory=list)
 
 
 @dataclass
@@ -82,6 +84,9 @@ class DeepMap:
             return False
         for cdn in self.cdns:
             for prefix in cdn.ipv4_prefixes:
+                if addr in prefix:
+                    return True
+            for prefix in cdn.ipv6_prefixes:
                 if addr in prefix:
                     return True
         return False

@@ -61,9 +61,46 @@ tool_entry:
     retention: string         # How long data is retained
     notes: string             # Additional context
 
+  # TLS certificate fingerprints for primary domains (point-in-time observation)
+  tls_certificates:
+    "<domain>":
+      sha256: string          # SHA-256 fingerprint of the leaf certificate
+      issuer: string          # Certificate issuer / CA name
+      valid_from: string      # Certificate validity start (YYYY-MM-DD)
+      valid_until: string     # Certificate validity end (YYYY-MM-DD)
+      observed: string        # Date this fingerprint was captured (YYYY-MM-DD)
+
   # Known official or community mirrors
   known_mirrors:
     - string
 
   # Free-form notes about the tool's network behavior
+  notes: string
+
+cdn_entry:
+  # (required) Unique identifier, lowercase with underscores
+  id: string
+
+  # (required) Human-readable CDN provider name
+  name: string
+
+  # (required) Autonomous System Number(s)
+  asn: string  # or [string] for multi-ASN providers
+
+  # IPv4 CIDR prefixes
+  ipv4_prefixes:
+    - string  # e.g., "104.16.0.0/13"
+
+  # IPv6 CIDR prefixes
+  ipv6_prefixes:
+    - string  # e.g., "2606:4700::/32"
+
+  # Which tools use this CDN
+  used_by:
+    - string
+
+  # Authoritative source URL for IP ranges
+  source_url: string
+
+  # Free-form notes
   notes: string
