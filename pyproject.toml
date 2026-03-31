@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fenceline"
+version = "0.2.0"
+description = "Supply chain security tools — create clarity in chaos"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+dependencies = ["pyyaml>=6.0"]
+
+[project.scripts]
+fenceline = "fenceline.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fenceline"]

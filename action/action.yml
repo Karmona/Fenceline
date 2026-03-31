@@ -1,0 +1,98 @@
+name: 'Fenceline Supply Chain Check'
+description: 'Scan lockfile changes for supply chain risk signals'
+
+branding:
+  icon: 'shield'
+  color: 'orange'
+
+inputs:
+  lockfile:
+    description: 'Path to lockfile (auto-detected if omitted)'
+    required: false
+  scorecard:
+    description: 'Include OpenSSF Scorecard data'
+    required: false
+    default: 'false'
+  fail-on:
+    description: 'Risk level that fails the check (critical, high, medium, low, none)'
+    required: false
+    default: 'high'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Fenceline
+      shell: bash
+      run: |
+        pip install "${{ github.action_path }}/.."
+
+    - name: Run Fenceline check
+      id: fenceline
+      shell: bash
+      env:
+        FENCELINE_LOCKFILE: ${{ inputs.lockfile }}
+        FENCELINE_SCORECARD: ${{ inputs.scorecard }}
+        FENCELINE_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        ARGS="check --base-ref ${{ github.event.pull_request.base.sha }} --format markdown"
+
+        if [ -n "$FENCELINE_LOCKFILE" ]; then
+          ARGS="$ARGS --lockfile $FENCELINE_LOCKFILE"
+        fi
+
+        if [ "$FENCELINE_SCORECARD" = "true" ]; then
+          ARGS="$ARGS --scorecard"
+        fi
+
+        ARGS="$ARGS --fail-on $FENCELINE_FAIL_ON"
+
+        # Run and capture output
+        set +e
+        OUTPUT=$(fenceline $ARGS 2>&1)
+        EXIT_CODE=$?
+        set -e
+
+        # Save output for comment step
+        echo "$OUTPUT" > "$RUNNER_TEMP/fenceline-output.md"
+        echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+    - name: Post PR comment
+      if: github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        COMMENT_MARKER="<!-- fenceline-supply-chain-check -->"
+        BODY="$COMMENT_MARKER
+        $(cat "$RUNNER_TEMP/fenceline-output.md")"
+
+        PR_NUMBER=${{ github.event.pull_request.number }}
+
+        # Find existing comment
+        EXISTING_COMMENT_ID=$(gh api \
+          "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+          --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id" \
+          2>/dev/null | head -1)
+
+        if [ -n "$EXISTING_COMMENT_ID" ]; then
+          # Update existing comment
+          gh api \
+            "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
+            -X PATCH \
+            -f body="$BODY"
+        else
+          # Create new comment
+          gh pr comment "$PR_NUMBER" --body "$BODY"
+        fi
+
+    - name: Check exit code
+      if: steps.fenceline.outputs.exit_code != '0'
+      shell: bash
+      run: |
+        echo "Fenceline check failed with exit code ${{ steps.fenceline.outputs.exit_code }}"
+        exit ${{ steps.fenceline.outputs.exit_code }}
