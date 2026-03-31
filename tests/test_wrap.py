@@ -190,17 +190,22 @@ class TestWrapperRouting:
 
     def test_no_docker_blocks_install(self, tmp_path):
         wrapper = self._make_wrapper(tmp_path)
-        # PATH includes tmp_path (for stubs) but NOT docker's directory.
-        # We still need bash-internal commands to work, so keep /usr/bin.
-        # The key: no 'docker' binary on this restricted PATH.
-        bash_dir = os.path.dirname(shutil.which("bash"))
+        # Create a clean bin dir with only essential tools (no docker).
+        # We symlink bash and command so the wrapper script can run,
+        # but docker is deliberately absent.
+        clean_bin = tmp_path / "clean_bin"
+        clean_bin.mkdir()
+        bash_path = shutil.which("bash")
+        if bash_path:
+            os.symlink(bash_path, clean_bin / "bash")
+
         env = {
-            "PATH": f"{tmp_path}:{bash_dir}",
+            "PATH": f"{tmp_path}:{clean_bin}",
             "HOME": os.environ.get("HOME", "/tmp"),
         }
 
         result = subprocess.run(
-            ["bash", str(wrapper), "install", "express"],
+            [str(clean_bin / "bash"), str(wrapper), "install", "express"],
             capture_output=True, text=True, env=env, timeout=10,
         )
         assert result.returncode == 1
