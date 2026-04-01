@@ -161,3 +161,60 @@ class TestSnapshotContainer:
         mock_run.side_effect = subprocess.TimeoutExpired("docker", 30)
         files = snapshot_container("docker", "abc123")
         assert files == {}
+
+
+class TestPthFileDetection:
+    """Detect malicious .pth files — used in TeamPCP/LiteLLM attack."""
+
+    def test_unknown_pth_file_is_critical(self):
+        """A new .pth file from a package install is a critical alert."""
+        added = [FileEntry(
+            path="/usr/local/lib/python3.12/site-packages/evil.pth",
+            permissions="644", size=50,
+        )]
+        alerts = check_suspicious_files(added, [], "pip")
+        pth_alerts = [a for a in alerts if ".pth" in a.reason]
+        assert len(pth_alerts) == 1
+        assert pth_alerts[0].severity == "critical"
+        assert "TeamPCP" in pth_alerts[0].reason
+
+    def test_known_pth_files_are_allowed(self):
+        """Legitimate .pth files (easy-install, setuptools) should not alert."""
+        added = [
+            FileEntry(
+                path="/usr/local/lib/python3.12/site-packages/easy-install.pth",
+                permissions="644", size=200,
+            ),
+            FileEntry(
+                path="/usr/local/lib/python3.12/site-packages/setuptools.pth",
+                permissions="644", size=50,
+            ),
+            FileEntry(
+                path="/usr/local/lib/python3.12/site-packages/distutils-precedence.pth",
+                permissions="644", size=30,
+            ),
+        ]
+        alerts = check_suspicious_files(added, [], "pip")
+        pth_alerts = [a for a in alerts if ".pth" in a.reason]
+        assert len(pth_alerts) == 0
+
+    def test_pth_in_npm_install_is_critical(self):
+        """A .pth file appearing during npm install is very suspicious."""
+        added = [FileEntry(
+            path="/app/node_modules/.hidden/backdoor.pth",
+            permissions="644", size=100,
+        )]
+        alerts = check_suspicious_files(added, [], "npm")
+        pth_alerts = [a for a in alerts if ".pth" in a.reason]
+        assert len(pth_alerts) == 1
+        assert pth_alerts[0].severity == "critical"
+
+    def test_virtualenv_pth_is_allowed(self):
+        """_virtualenv.pth is a known legitimate .pth file."""
+        added = [FileEntry(
+            path="/usr/local/lib/python3.12/site-packages/_virtualenv.pth",
+            permissions="644", size=30,
+        )]
+        alerts = check_suspicious_files(added, [], "pip")
+        pth_alerts = [a for a in alerts if ".pth" in a.reason]
+        assert len(pth_alerts) == 0

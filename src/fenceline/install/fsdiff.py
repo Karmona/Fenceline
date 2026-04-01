@@ -45,6 +45,12 @@ _SUSPICIOUS_DIRS = {"/etc", "/root", "/home", "/var/spool/cron", "/usr/lib/syste
 # File extensions that suggest dropped binaries
 _SUSPICIOUS_EXTENSIONS = {".so", ".dylib", ".dll", ".exe", ".elf", ".sh", ".bash"}
 
+# Python .pth files: execute arbitrary code on every Python startup.
+# Used by LiteLLM in the TeamPCP campaign (March 2026). A .pth file
+# appearing in a pip install is a strong malware signal — legitimate
+# packages almost never need them.
+_PTH_EXTENSION = ".pth"
+
 
 def snapshot_container(docker_bin: str, container_id: str, root: str = "/app") -> Dict[str, FileEntry]:
     """Take a filesystem snapshot of the container.
@@ -118,6 +124,24 @@ def check_suspicious_files(
     expected_prefixes = _EXPECTED_DIRS.get(tool_id, set())
 
     for entry in added:
+        # Check for .pth files — execute on every Python startup.
+        # Used in TeamPCP/LiteLLM attack. Legitimate packages rarely use these.
+        if entry.path.endswith(_PTH_EXTENSION):
+            # A few .pth files are legitimate (e.g., easy-install.pth,
+            # setuptools.pth, distutils-precedence.pth). Flag unknown ones.
+            basename = entry.path.rsplit("/", 1)[-1] if "/" in entry.path else entry.path
+            known_pth = {"easy-install.pth", "setuptools.pth",
+                         "distutils-precedence.pth", "_virtualenv.pth"}
+            if basename not in known_pth:
+                alerts.append(FsAlert(
+                    path=entry.path,
+                    reason=(
+                        f"New .pth file — executes arbitrary code on every Python "
+                        f"startup (used in TeamPCP/LiteLLM attack)"
+                    ),
+                    severity="critical",
+                ))
+
         # Check if file is in a suspicious location
         for suspicious_dir in _SUSPICIOUS_DIRS:
             if entry.path.startswith(suspicious_dir):

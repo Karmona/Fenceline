@@ -45,7 +45,7 @@ CLI (cli.py) → wrap.py (transparent interception)
 2. **Port enforcement** — anything not port 443 = CRITICAL alert
 3. **CDN fingerprinting** — IP must be in expected CDN CIDR range for the tool
 4. **Expected-process heuristic** — curl/wget/bash during npm install = WARNING
-5. **Filesystem diffing** — dropped binaries, files in /etc, /root, /home, suspicious extensions
+5. **Filesystem diffing** — dropped binaries, files in /etc, /root, /home, suspicious extensions, `.pth` files (TeamPCP/LiteLLM attack vector)
 6. **Import monitoring** — Stage 2 runs require()/import() inside container
 7. **DNS monitoring** — captures outbound UDP port 53, flags unusual resolver activity
 8. **HTTP behavior** — CONNECT proxy logs target domains, POST/PUT to unexpected domains flagged (Node.js proxy for npm/yarn/pnpm, Python proxy for pip)
