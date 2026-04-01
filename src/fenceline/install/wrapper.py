@@ -12,6 +12,7 @@ from typing import List
 
 from fenceline.deepmap.loader import load_maps
 from fenceline.install.monitor import NetworkMonitor
+from fenceline.install.sandbox import _extract_package_name, is_platform_native_package, package_os_matches_linux
 from fenceline.log import get_logger
 
 logger = get_logger(__name__)
@@ -59,6 +60,19 @@ def _run_sandboxed(cmd: list[str], monitor_time: int = 60,
     import time as _time
 
     from fenceline.install.sandbox import SandboxedInstall, docker_available
+
+    # Platform-specific native binaries (e.g. @rollup/rollup-darwin-arm64) cannot be
+    # installed inside a Linux sandbox container — npm installs the Linux variant instead
+    # and the expected artifact never exists. Fall back to host-based monitoring.
+    pkg_name = _extract_package_name(cmd)
+    if pkg_name and is_platform_native_package(pkg_name) and not package_os_matches_linux(pkg_name):
+        print(
+            f"[fenceline] Platform-native package detected: {pkg_name}\n"
+            f"[fenceline] Linux sandbox cannot install darwin/win32 binaries.\n"
+            f"[fenceline] Falling back to host-based network monitoring.",
+            file=sys.stderr,
+        )
+        return _run_host(cmd)
 
     if not docker_available():
         if output_format == "json":

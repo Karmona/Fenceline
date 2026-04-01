@@ -9,8 +9,147 @@ from fenceline.install.sandbox import (
     SandboxedInstall,
     ContainerMonitor,
     _safe_package_name,
+    is_platform_native_package,
+    package_os_matches_linux,
 )
 from fenceline.install.monitor import Connection, parse_ss_output, parse_iptables_log
+
+
+# --- is_platform_native_package / package_os_matches_linux ---
+
+
+class TestPlatformNativePackage:
+    def test_rollup_darwin_arm64_is_native(self):
+        assert is_platform_native_package("@rollup/rollup-darwin-arm64") is True
+
+    def test_esbuild_linux_x64_is_native(self):
+        assert is_platform_native_package("esbuild-linux-x64") is True
+
+    def test_esbuild_linux_x64_musl_is_native(self):
+        assert is_platform_native_package("esbuild-linux-x64-musl") is True
+
+    def test_swc_darwin_arm64_is_native(self):
+        assert is_platform_native_package("@swc/core-darwin-arm64") is True
+
+    def test_win32_x64_is_native(self):
+        assert is_platform_native_package("esbuild-win32-x64") is True
+
+    def test_express_is_not_native(self):
+        assert is_platform_native_package("express") is False
+
+    def test_is_odd_is_not_native(self):
+        assert is_platform_native_package("is-odd") is False
+
+    def test_rollup_scoped_no_platform_is_not_native(self):
+        assert is_platform_native_package("@rollup/rollup") is False
+
+    def test_darwin_package_does_not_match_linux_container(self):
+        assert package_os_matches_linux("@rollup/rollup-darwin-arm64") is False
+
+    def test_win32_package_does_not_match_linux_container(self):
+        assert package_os_matches_linux("esbuild-win32-x64") is False
+
+    def test_linux_package_matches_linux_container(self):
+        assert package_os_matches_linux("esbuild-linux-x64") is True
+
+    def test_non_platform_package_matches_linux_container(self):
+        assert package_os_matches_linux("express") is True
+
+
+# --- _copy_package_manifest ---
+
+
+class TestCopyPackageManifest:
+    """Tests for _copy_package_manifest: copies package.json for bare npm installs."""
+
+    def _make_sandbox(self):
+        from fenceline.deepmap.models import DeepMap, ToolMap, CDNMap, AllowedDomain
+        cdn = CDNMap(id="cloudflare", name="cloudflare")
+        tool = ToolMap(
+            id="npm", description="npm",
+            primary_domains=[AllowedDomain(domain="registry.npmjs.org", cdn_provider="cloudflare")],
+        )
+        return SandboxedInstall(DeepMap(tools=[tool], cdns=[cdn]))
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_bare_install_copies_package_json(self, mock_run, _mock_docker, tmp_path):
+        """Bare 'npm install' should docker cp package.json into the container."""
+        sandbox = self._make_sandbox()
+        sandbox._container_id = "abc123"
+
+        (tmp_path / "package.json").write_text('{"name":"test","version":"1.0.0"}')
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr=b"")
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            sandbox._copy_package_manifest(["npm", "install"], is_node=True)
+        finally:
+            os.chdir(old_cwd)
+
+        # docker cp should have been called for package.json
+        calls = [c.args[0] for c in mock_run.call_args_list]
+        cp_calls = [c for c in calls if len(c) > 1 and c[1] == "cp"]
+        assert any("package.json" in str(c) for c in cp_calls), (
+            f"Expected docker cp for package.json, got: {cp_calls}"
+        )
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_named_install_skips_copy(self, mock_run, _mock_docker, tmp_path):
+        """'npm install express' should NOT copy package.json — not a bare install."""
+        sandbox = self._make_sandbox()
+        sandbox._container_id = "abc123"
+
+        (tmp_path / "package.json").write_text('{"name":"test","version":"1.0.0"}')
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            sandbox._copy_package_manifest(["npm", "install", "express"], is_node=True)
+        finally:
+            os.chdir(old_cwd)
+
+        # docker cp should NOT have been called
+        calls = [c.args[0] for c in mock_run.call_args_list]
+        cp_calls = [c for c in calls if len(c) > 1 and c[1] == "cp"]
+        assert len(cp_calls) == 0, f"Expected no docker cp for named install, got: {cp_calls}"
+
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_non_node_skips_copy(self, mock_run, tmp_path):
+        """pip installs should never trigger package.json copy."""
+        sandbox = self._make_sandbox()
+        sandbox._container_id = "abc123"
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            sandbox._copy_package_manifest(["pip", "install", "requests"], is_node=False)
+        finally:
+            os.chdir(old_cwd)
+
+        mock_run.assert_not_called()
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_no_package_json_skips_copy(self, mock_run, _mock_docker, tmp_path):
+        """Bare install with no package.json on host should not call docker cp."""
+        sandbox = self._make_sandbox()
+        sandbox._container_id = "abc123"
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)  # empty dir, no package.json
+            sandbox._copy_package_manifest(["npm", "install"], is_node=True)
+        finally:
+            os.chdir(old_cwd)
+
+        mock_run.assert_not_called()
 
 
 # --- _safe_package_name ---

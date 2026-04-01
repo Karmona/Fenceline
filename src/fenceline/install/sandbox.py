@@ -21,6 +21,37 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+# Regex to match platform-specific native binary packages.
+# Matches: esbuild-darwin-arm64, @rollup/rollup-linux-x64-musl, etc.
+_PLATFORM_NAME_RE = re.compile(
+    r'-(darwin|linux|win32|freebsd|openbsd|android)'
+    r'-(x64|x86|arm64|arm|ia32|ppc64|s390x)'
+    r'(-musl|-gnu|-msvc)?$'
+)
+
+
+def is_platform_native_package(pkg_name: str) -> bool:
+    """Return True if pkg_name is a platform-specific native binary package.
+
+    Detection uses name pattern only (no network call).
+    Matches packages like: @rollup/rollup-darwin-arm64, esbuild-linux-x64-musl
+    """
+    name = pkg_name.split('/')[-1] if '/' in pkg_name else pkg_name
+    return bool(_PLATFORM_NAME_RE.search(name))
+
+
+def package_os_matches_linux(pkg_name: str) -> bool:
+    """Return True if the package's target OS is Linux (matches the sandbox container).
+
+    The sandbox always runs a Linux container. Darwin/win32/etc packages cannot
+    be installed there — npm installs the Linux variant instead.
+    """
+    name = pkg_name.split('/')[-1] if '/' in pkg_name else pkg_name
+    m = _PLATFORM_NAME_RE.search(name)
+    if not m:
+        return True  # not platform-specific, works in any container
+    return m.group(1) == 'linux'
+
 from fenceline.deepmap.models import DeepMap
 from fenceline.install.fsdiff import snapshot_container, diff_snapshots, check_suspicious_files, FsAlert
 from fenceline.install.http_logger import PROXY_SCRIPT, NODE_PROXY_SCRIPT, parse_http_log, check_http_behavior

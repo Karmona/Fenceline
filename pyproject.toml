@@ -49,7 +49,7 @@ Changelog = "https://github.com/Karmona/Fenceline/blob/main/CHANGELOG.md"
 fenceline = "fenceline.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "pytest-timeout", "ruff"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fenceline"]
