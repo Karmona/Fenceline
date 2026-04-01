@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import __version__
@@ -30,6 +31,11 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 def _cmd_audit_actions(args: argparse.Namespace) -> int:
     from .actions.audit import run
+    return run(args)
+
+
+def _cmd_map(args: argparse.Namespace) -> int:
+    from .map_check import run
     return run(args)
 
 
@@ -148,12 +154,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     audit_actions_parser.set_defaults(func=_cmd_audit_actions)
 
+    # -- map --
+    map_parser = subparsers.add_parser(
+        "map", help="Check or update deep map data (network baselines)",
+    )
+    map_parser.add_argument(
+        "--check", action="store_true",
+        help="Validate map data against live DNS",
+    )
+    map_parser.add_argument(
+        "--update", action="store_true",
+        help="Update DNS snapshots in map YAML files",
+    )
+    map_parser.set_defaults(func=_cmd_map)
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Respect --no-color and NO_COLOR env var (https://no-color.org/)
+    if getattr(args, 'no_color', False) or os.environ.get('NO_COLOR'):
+        os.environ['NO_COLOR'] = '1'
 
     if not args.command:
         parser.print_help()

@@ -87,6 +87,43 @@ def _safe_package_name(name: str) -> bool:
     return bool(_VALID_PKG_NAME.match(name)) and '..' not in name
 
 
+def _host_pip_destination() -> Path:
+    """Determine where to copy pip packages on the host.
+
+    Uses the active virtualenv's site-packages if available,
+    otherwise falls back to the current directory.
+    """
+    import sysconfig
+    try:
+        site_packages = sysconfig.get_path('purelib')
+        if site_packages and Path(site_packages).is_dir():
+            return Path(site_packages)
+    except (KeyError, TypeError):
+        pass
+    print("[fenceline] Warning: no virtualenv detected, copying to current directory.",
+          file=sys.stderr)
+    return Path.cwd()
+
+
+def _validate_container_path(path: str) -> bool:
+    """Validate that a container path is safe to copy from.
+
+    Prevents path traversal and copying from sensitive locations.
+    """
+    # No path traversal
+    if '..' in path:
+        return False
+    # Must be absolute
+    if not path.startswith('/'):
+        return False
+    # Block sensitive host-mapped paths
+    _blocked = {'/proc', '/sys', '/dev'}
+    for blocked in _blocked:
+        if path.startswith(blocked):
+            return False
+    return True
+
+
 def _extract_package_name(cmd: list[str]) -> Optional[str]:
     """Extract the main package name from an install command.
 
@@ -449,6 +486,7 @@ class SandboxedInstall:
             alerts = monitor.stop()
             self._print_alerts("Stage 1 (install)", alerts)
             print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
+            print(f"[fenceline] ACTION: Do not retry or bypass. Investigate the package before use.")
             self._kill_container()
             return alerts, 1
 
@@ -462,6 +500,7 @@ class SandboxedInstall:
                     alerts = monitor.stop()
                     self._print_fs_alerts(fs_alerts)
                     print(f"\n[fenceline] Sandbox: BLOCKED — suspicious filesystem changes.")
+                    print(f"[fenceline] ACTION: Do not retry or bypass. Investigate the package before use.")
                     self._kill_container()
                     return alerts, 1
 
@@ -502,6 +541,7 @@ class SandboxedInstall:
             stage = "Stage 2 (import)" if pkg_name else "install"
             self._print_alerts(stage, alerts)
             print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
+            print(f"[fenceline] ACTION: Do not retry or bypass. Investigate the package before use.")
             self._kill_container()
             return alerts, 1
 
@@ -606,8 +646,9 @@ class SandboxedInstall:
                   file=sys.stderr)
             return False
 
-        print(f"[fenceline] Copying {len(new_packages)} new pip package(s)...")
-        dest = str(Path.cwd()) + "/"
+        # Determine host destination — virtualenv site-packages if active, else cwd
+        host_dest = _host_pip_destination()
+        print(f"[fenceline] Copying {len(new_packages)} new pip package(s) to {host_dest}...")
         all_ok = True
         for pkg_lower, pkg_original in new_packages.items():
             # pip normalizes names: requests -> requests/, but some use
@@ -620,7 +661,7 @@ class SandboxedInstall:
                     capture_output=True, timeout=5,
                 )
                 if result.returncode == 0:
-                    if not self._copy_artifacts(container_path, Path.cwd()):
+                    if not self._copy_artifacts(container_path, host_dest):
                         all_ok = False
                     break
 
@@ -630,7 +671,12 @@ class SandboxedInstall:
         """Copy install artifacts from container to host.
 
         Returns True if artifacts were copied successfully, False otherwise.
+        Validates container_path before copying to prevent path traversal.
         """
+        if not _validate_container_path(container_path):
+            print(f"[fenceline] Error: refusing to copy from unsafe path: {container_path}",
+                  file=sys.stderr)
+            return False
         dest = str(host_dir) + "/"
         try:
             result = subprocess.run(
