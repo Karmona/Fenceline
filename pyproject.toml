@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fenceline"
-version = "0.5.0"
+version = "0.6.0"
 description = "Dependency firewall for developer machines — sandboxed install verification for npm and Node.js"
 readme = "README.md"
 license = "Apache-2.0"

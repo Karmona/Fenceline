@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 
 from fenceline.deepmap.models import DeepMap
 from fenceline.install.fsdiff import snapshot_container, diff_snapshots, check_suspicious_files, FsAlert
+from fenceline.install.http_logger import PROXY_SCRIPT, parse_http_log, check_http_behavior
 from fenceline.install.matcher import check_connection
 from fenceline.log import get_logger
 
@@ -495,12 +496,24 @@ class SandboxedInstall:
             "--log-prefix 'FENCELINE_DNS:' --log-level 4 2>/dev/null ; "
         )
 
-        # For pip, we also snapshot the pre-install package list so we can
-        # diff it after install to know which packages were added.
+        # HTTP logging proxy setup — only for Python containers (which have python3).
+        # For Node containers, we rely on iptables LOG + expected-process heuristic.
         is_pip = tool_id in ("pip", "pip3")
+        proxy_setup = ""
+        if is_pip:
+            # Write proxy script and start it in background, set env vars
+            escaped_script = PROXY_SCRIPT.replace("'", "'\\''")
+            proxy_setup = (
+                f"echo '{escaped_script}' > /tmp/fenceline-proxy.py ; "
+                "python3 /tmp/fenceline-proxy.py & "
+                "export HTTP_PROXY=http://127.0.0.1:8899 ; "
+                "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
+            )
+
+        # For pip, also snapshot the pre-install package list.
         if is_pip:
             shell_cmd = (
-                iptables_setup
+                iptables_setup + proxy_setup
                 + "pip list --format=json > /tmp/.fenceline-pre-packages.json 2>/dev/null ; "
                 + f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
                 + f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
@@ -642,6 +655,22 @@ class SandboxedInstall:
         dns_warning = check_dns_activity(dns_servers)
         if dns_warning:
             logger.warning(f"DNS: {dns_warning}")
+
+        # --- HTTP behavior check (for containers with proxy) ---
+        if is_pip:
+            try:
+                http_result = subprocess.run(
+                    [_docker(), "exec", self._container_id,
+                     "cat", "/tmp/fenceline-http.log"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if http_result.returncode == 0 and http_result.stdout.strip():
+                    http_entries = parse_http_log(http_result.stdout)
+                    http_warnings = check_http_behavior(http_entries, tool_id, self._deep_map)
+                    for w in http_warnings:
+                        logger.warning(f"HTTP: {w}")
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
 
         # Clean install — copy artifacts to host
         logger.info("Sandbox: install clean. Copying artifacts to host...")

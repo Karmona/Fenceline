@@ -137,6 +137,18 @@ def compute_risk(
             "detail": "Newly added dependency (not an update)",
         })
 
+    # --- Capability escalation (postinstall/preinstall added between versions) ---
+    for cap_signal in capabilities:
+        if cap_signal.startswith("capability_escalation_"):
+            script_type = cap_signal.replace("capability_escalation_", "")
+            pts = 20
+            score += pts
+            signals.append({
+                "signal": cap_signal,
+                "points": pts,
+                "detail": f"{script_type} script added between versions (was not present before)",
+            })
+
     level = _level_for_score(score)
 
     return RiskReport(

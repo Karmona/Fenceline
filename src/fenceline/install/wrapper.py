@@ -12,6 +12,9 @@ from typing import List
 
 from fenceline.deepmap.loader import load_maps
 from fenceline.install.monitor import NetworkMonitor
+from fenceline.log import get_logger
+
+logger = get_logger(__name__)
 
 
 def run(args) -> int:
@@ -117,17 +120,15 @@ def _run_host(cmd: list[str]) -> int:
     command_name = cmd[0]
     supported = {"npm", "pip", "pip3", "yarn", "pnpm", "cargo", "brew"}
     if command_name not in supported:
-        print(
-            f"Warning: '{command_name}' is not a recognized package manager. "
-            f"Monitoring anyway.",
-            file=sys.stderr,
+        logger.warning(
+            f"'{command_name}' is not a recognized package manager. Monitoring anyway."
         )
 
     deep_map = load_maps()
     monitor = NetworkMonitor(deep_map)
 
-    print(f"[fenceline] Monitoring network during: {' '.join(cmd)}")
-    print(f"[fenceline] Note: running on your machine (use --sandbox for isolation)")
+    logger.info(f"Monitoring network during: {' '.join(cmd)}")
+    logger.info("Note: running on your machine (use --sandbox for isolation)")
 
     try:
         proc = subprocess.Popen(

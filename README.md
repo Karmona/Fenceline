@@ -3,7 +3,7 @@
 [![CI](https://github.com/Karmona/Fenceline/actions/workflows/ci.yml/badge.svg)](https://github.com/Karmona/Fenceline/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
-[![v0.5.0](https://img.shields.io/badge/version-0.5.0-orange.svg)](CHANGELOG.md)
+[![v0.6.0](https://img.shields.io/badge/version-0.6.0-orange.svg)](CHANGELOG.md)
 
 **A dependency firewall for developer machines.**
 

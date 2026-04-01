@@ -18,6 +18,9 @@ from typing import List, Optional, Tuple
 import yaml
 
 from fenceline.deepmap.loader import find_map_dir, load_maps
+from fenceline.log import get_logger
+
+logger = get_logger(__name__)
 
 
 def run(args) -> int:
@@ -40,13 +43,13 @@ def _check_freshness() -> int:
     """Check if map data matches live DNS."""
     map_dir = find_map_dir()
     if map_dir is None:
-        print("[fenceline] Error: map directory not found.", file=sys.stderr)
+        logger.error("Map directory not found.")
         return 1
 
     deep_map = load_maps(map_dir)
     issues: List[str] = []
 
-    print("[fenceline] Checking map freshness...")
+    logger.info("Checking map freshness...")
     for tool in deep_map.tools:
         for domain_info in tool.primary_domains:
             domain = domain_info.domain
@@ -61,10 +64,10 @@ def _check_freshness() -> int:
                 print(f"  {tool.id}: {domain} — OK")
 
     if issues:
-        print(f"\n[fenceline] {len(issues)} issue(s) found. Run 'fenceline map --update' to fix.")
+        print(f"\n{len(issues)} issue(s) found. Run 'fenceline map --update' to fix.")
         return 1
     else:
-        print(f"\n[fenceline] All maps current.")
+        print(f"\nAll maps current.")
         return 0
 
 
@@ -125,16 +128,16 @@ def _update_maps() -> int:
     """Update DNS snapshots in map YAML files."""
     map_dir = find_map_dir()
     if map_dir is None:
-        print("[fenceline] Error: map directory not found.", file=sys.stderr)
+        logger.error("Map directory not found.")
         return 1
 
     tools_dir = map_dir / "tools"
     if not tools_dir.is_dir():
-        print("[fenceline] Error: tools directory not found.", file=sys.stderr)
+        logger.error("Tools directory not found.")
         return 1
 
     updated = 0
-    print("[fenceline] Updating map data...")
+    logger.info("Updating map data...")
 
     for yaml_file in sorted(tools_dir.glob("*.yaml")):
         try:

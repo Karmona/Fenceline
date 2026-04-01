@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.6.0] - 2026-04-01
 
 ### Added
 - **iptables LOG monitoring** — captures every outbound TCP SYN and DNS query inside the container with zero race condition. Eliminates the 500ms polling gap.

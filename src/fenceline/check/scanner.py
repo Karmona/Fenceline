@@ -23,7 +23,7 @@ from .registry import (
     get_pypi_maintainer_change,
 )
 from .provenance import check_provenance
-from .capabilities import check_capabilities
+from .capabilities import check_capabilities, diff_capabilities
 from .scoring import compute_risk, RiskReport
 
 
@@ -104,6 +104,9 @@ def run(args) -> int:
                     "attestation_count": 0,
                 }
                 caps = check_capabilities(info, version)
+                # Detect capability escalation between versions
+                cap_diff = diff_capabilities(info, change.old_version, version)
+                caps.extend(cap_diff)
 
         report = compute_risk(change, age, maint, prov, caps)
         reports.append(report)
