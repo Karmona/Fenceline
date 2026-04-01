@@ -9,10 +9,6 @@ inputs:
   lockfile:
     description: 'Path to lockfile (auto-detected if omitted)'
     required: false
-  fail-on:
-    description: '(Not yet implemented) Minimum risk level to fail the check'
-    required: false
-    default: 'high'
 
 runs:
   using: 'composite'
@@ -32,7 +28,6 @@ runs:
       shell: bash
       env:
         FENCELINE_LOCKFILE: ${{ inputs.lockfile }}
-        FENCELINE_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         ARGS="check --base-ref ${{ github.event.pull_request.base.sha }} --format markdown"
 
@@ -40,7 +35,6 @@ runs:
           ARGS="$ARGS --lockfile $FENCELINE_LOCKFILE"
         fi
 
-        # Note: --fail-on is planned but not yet implemented in the CLI.
         # fenceline check returns exit code 1 if HIGH/CRITICAL risks are found.
 
         # Run and capture output

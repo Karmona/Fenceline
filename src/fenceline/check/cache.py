@@ -7,13 +7,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 from typing import Optional
 
 
-_CACHE_DIR = Path.home() / ".cache" / "fenceline" / "registry"
+_DEFAULT_CACHE_DIR = Path.home() / ".cache" / "fenceline" / "registry"
 _DEFAULT_TTL = 3600  # 1 hour
+
+
+def _get_cache_dir() -> Path:
+    """Return the cache directory, respecting FENCELINE_CACHE_DIR override."""
+    override = os.environ.get("FENCELINE_CACHE_DIR")
+    if override:
+        return Path(override)
+    return _DEFAULT_CACHE_DIR
 
 
 def get_cached(key: str) -> Optional[dict]:
@@ -34,7 +43,8 @@ def get_cached(key: str) -> Optional[dict]:
 def set_cached(key: str, payload: dict) -> None:
     """Store data in cache."""
     try:
-        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_dir = _get_cache_dir()
+        cache_dir.mkdir(parents=True, exist_ok=True)
         cache_file = _cache_path(key)
         data = {"_cached_at": time.time(), "payload": payload}
         cache_file.write_text(json.dumps(data))
@@ -45,4 +55,4 @@ def set_cached(key: str, payload: dict) -> None:
 def _cache_path(key: str) -> Path:
     """Generate a safe filesystem path from a cache key."""
     safe = hashlib.sha256(key.encode()).hexdigest()[:16]
-    return _CACHE_DIR / f"{safe}.json"
+    return _get_cache_dir() / f"{safe}.json"

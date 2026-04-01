@@ -84,7 +84,7 @@ fenceline install --sandbox npm install <pkg>
 | **Filesystem diffing** | Dropped binaries, files in /etc, /root, /home | Pre/post snapshot comparison |
 | **Import monitoring** | Lazy payloads that activate on require()/import | Stage 2 runs require() inside container |
 | **DNS monitoring** | DNS tunneling, unusual resolver activity | iptables LOG on UDP port 53 |
-| **HTTP behavior** | POST/PUT to unexpected domains | Logging proxy captures CONNECT targets and HTTP methods |
+| **HTTP behavior** | POST/PUT to unexpected domains | Logging proxy captures CONNECT targets and HTTP methods (pip containers; Node relies on iptables + process heuristic) |
 | **Metadata scoring** | New packages, maintainer changes, missing provenance | Lockfile diff + registry lookup + risk scoring |
 | **Capability escalation** | postinstall/preinstall added between versions | Version-to-version capability comparison |
 
@@ -112,7 +112,7 @@ Theoretical assessments -- not proven in-the-wild. See [exploits/](exploits/) fo
 | Axios RAT | 2026 | **Would block** -- C2 on port 8000 |
 | TeamPCP: LiteLLM | 2026 | **Would block** -- Stage 2 catches .pth payload |
 | chalk/debug | 2025 | **Would block** -- Stage 2 catches import C2 |
-| Nx/s1ngularity | 2025 | **Would block** -- HTTP proxy detects POST to unexpected domain |
+| Nx/s1ngularity | 2025 | **Would block** -- iptables catches outbound connection + process heuristic flags unexpected process |
 | Ultralytics | 2024 | **Would block** -- mining pool on port 8080 |
 | ua-parser-js | 2021 | **Would block** -- postinstall phones home + unexpected process (curl) |
 | event-stream | 2018 | **Would block** -- Stage 2 catches import payload |
@@ -136,9 +136,11 @@ Theoretical assessments -- not proven in-the-wild. See [exploits/](exploits/) fo
 | Ecosystem | Sandbox | Artifact copy | Wrapping | Status |
 |-----------|---------|---------------|----------|--------|
 | **Node.js** (npm, yarn, pnpm) | Full | Full | Full | Production |
-| **Python** (pip) | Full | Full | Full | Supported |
+| **Python** (pip) | Full | Packages only¹ | Full | Supported |
 | **Rust** (cargo) | Monitoring only | No | No | Experimental |
 | **Ruby** (gem) | Monitoring only | No | No | Experimental |
+
+¹ Copies package directories from site-packages. Console scripts (`bin/`) and `.dist-info` metadata are not yet promoted.
 
 ## Commands
 

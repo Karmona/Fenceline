@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 - **iptables LOG monitoring** — captures every outbound TCP SYN and DNS query inside the container with zero race condition. Eliminates the 500ms polling gap.
 - **Expected-process heuristic** — detects curl, wget, bash etc. making network connections during installs. Maps expected processes per tool via deep map YAML.
 - **DNS query monitoring** — captures outbound UDP port 53 via iptables LOG. Detects DNS tunneling and unusual resolver activity.
-- **HTTP behavior analysis** — logging proxy captures CONNECT targets and HTTP methods. Detects POST/PUT to unexpected domains (catches Nx/s1ngularity-style exfiltration).
+- **HTTP behavior analysis** — logging proxy (pip containers) captures CONNECT targets and HTTP methods. Detects POST/PUT to unexpected domains. Node containers use iptables + process heuristic instead.
 - **Registry caching** — 1-hour file cache for npm/PyPI lookups in `~/.cache/fenceline/`. Makes repeated `fenceline check` runs fast.
 - **Capability diffing** — detects when postinstall/preinstall scripts are added between package versions. Common attack pattern.
 - **Output formatters** — colored console output (ANSI, respects NO_COLOR) and GitHub markdown tables with emoji status indicators.

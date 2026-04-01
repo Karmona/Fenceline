@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import urllib.error
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
+
+import pytest
 
 from fenceline.check.registry import (
     get_package_info,
@@ -15,6 +19,12 @@ from fenceline.check.registry import (
     get_pypi_package_age,
     get_pypi_maintainer_change,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_cache(tmp_path, monkeypatch):
+    """Redirect registry cache to a temp directory for test isolation."""
+    monkeypatch.setenv("FENCELINE_CACHE_DIR", str(tmp_path / "cache"))
 
 
 def _mock_urlopen(data: dict, status: int = 200):
@@ -27,17 +37,8 @@ def _mock_urlopen(data: dict, status: int = 200):
 
 
 class TestGetPackageInfo:
-    @staticmethod
-    def _clear_cache():
-        """Clear registry cache to isolate tests."""
-        from fenceline.check.cache import _CACHE_DIR
-        import shutil
-        if _CACHE_DIR.exists():
-            shutil.rmtree(_CACHE_DIR)
-
     @patch("fenceline.check.registry.urllib.request.urlopen")
     def test_success(self, mock_urlopen):
-        self._clear_cache()
         mock_urlopen.return_value = _mock_urlopen({"name": "express", "versions": {}})
         result = get_package_info("express")
         assert result is not None
@@ -52,7 +53,6 @@ class TestGetPackageInfo:
 
     @patch("fenceline.check.registry.urllib.request.urlopen")
     def test_timeout_returns_none(self, mock_urlopen):
-        self._clear_cache()
         mock_urlopen.side_effect = urllib.error.URLError("timeout")
         assert get_package_info("express") is None
 

@@ -777,6 +777,7 @@ class SandboxedInstall:
         for pkg_lower, pkg_original in new_packages.items():
             # pip normalizes names: requests -> requests/, but some use
             # the original case or replace - with _
+            copied_pkg = False
             for candidate in [pkg_lower, pkg_original, pkg_lower.replace("-", "_"),
                               pkg_original.replace("-", "_")]:
                 container_path = f"{site_packages}/{candidate}"
@@ -787,9 +788,38 @@ class SandboxedInstall:
                 if result.returncode == 0:
                     if not self._copy_artifacts(container_path, host_dest):
                         all_ok = False
+                    copied_pkg = True
+                    # Also copy .dist-info directory if it exists
+                    self._copy_dist_info(site_packages, candidate, host_dest)
                     break
+            if not copied_pkg:
+                logger.warning(f"Could not find package directory for {pkg_original}")
 
         return all_ok
+
+    def _copy_dist_info(self, site_packages: str, pkg_name: str, host_dest: Path) -> None:
+        """Copy .dist-info metadata directory for a package.
+
+        This preserves package metadata (version, entry points, etc.)
+        needed by pip to track installed packages on the host.
+        """
+        # dist-info dirs use normalized names: requests-2.31.0.dist-info
+        # Try to find matching dist-info directory
+        normalized = pkg_name.replace("-", "_")
+        try:
+            result = subprocess.run(
+                [_docker(), "exec", self._container_id,
+                 "sh", "-c", f"ls -d {site_packages}/{normalized}-*.dist-info 2>/dev/null"
+                              f" || ls -d {site_packages}/{pkg_name}-*.dist-info 2>/dev/null"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                for dist_dir in result.stdout.strip().splitlines():
+                    dist_dir = dist_dir.strip()
+                    if dist_dir and ".dist-info" in dist_dir:
+                        self._copy_artifacts(dist_dir, host_dest)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass  # dist-info copy is best-effort
 
     def _copy_artifacts(self, container_path: str, host_dir: Path) -> bool:
         """Copy install artifacts from container to host.
