@@ -56,6 +56,7 @@ packages = ["src/fenceline"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["integration: requires Docker daemon (deselect with '-m not integration')"]
 
 [tool.ruff]
 target-version = "py39"

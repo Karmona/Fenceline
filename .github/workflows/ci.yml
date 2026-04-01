@@ -30,8 +30,8 @@ jobs:
           pip install hatchling
           pip install -e ".[dev]"
 
-      - name: Run tests
-        run: python -m pytest tests/ -v --tb=long
+      - name: Run unit tests
+        run: python -m pytest tests/ -v --tb=long -m "not integration"
 
       - name: Verify CLI works
         run: fenceline --version
