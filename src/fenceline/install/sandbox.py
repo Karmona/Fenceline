@@ -207,12 +207,46 @@ class ContainerMonitor:
         self._thread.start()
 
     def stop(self) -> List[Alert]:
-        """Stop monitoring and return collected alerts."""
+        """Stop monitoring and return collected alerts.
+
+        After stopping the polling thread, does a final sweep of the
+        iptables LOG (via dmesg) to catch any connections that were
+        too short-lived for polling to detect.
+        """
         self._running = False
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
+
+        # Post-hoc sweep: check iptables LOG for connections missed by polling
+        self._sweep_iptables_log()
+
         return list(self._alerts)
+
+    def _sweep_iptables_log(self) -> None:
+        """Read iptables LOG from container dmesg for complete connection history."""
+        try:
+            result = subprocess.run(
+                [_docker(), "exec", self._container_id, "dmesg"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode != 0:
+                return  # iptables not available, silent fallback
+
+            connections = parse_iptables_log(result.stdout)
+            for conn in connections:
+                key = (conn.remote_ip, conn.remote_port)
+                if key in self._seen:
+                    continue
+                self._seen.add(key)
+
+                alert = check_connection(conn, self._deep_map, self._tool_id)
+                if alert is not None:
+                    self._alerts.append(alert)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass  # Silent fallback to polling-only results
 
     def _poll(self) -> None:
         """Background loop: poll container connections via docker exec."""
@@ -366,11 +400,54 @@ def parse_ss_output(output: str) -> List[Connection]:
     return connections
 
 
+def parse_iptables_log(output: str) -> List[Connection]:
+    """Parse iptables LOG output from dmesg for outbound TCP SYN packets.
+
+    Expected format (from --log-prefix 'FENCELINE:'):
+      FENCELINE:IN= OUT=eth0 SRC=172.17.0.2 DST=93.184.216.34 ...
+      PROTO=TCP SPT=45678 DPT=443 ...
+
+    This captures EVERY outbound connection attempt with zero race condition,
+    complementing the netstat polling which can miss short-lived connections.
+    """
+    connections: List[Connection] = []
+    now = time.time()
+
+    for line in output.splitlines():
+        if "FENCELINE:" not in line:
+            continue
+
+        dst = ""
+        dpt = 0
+        for token in line.split():
+            if token.startswith("DST="):
+                dst = token[4:]
+            elif token.startswith("DPT="):
+                try:
+                    dpt = int(token[4:])
+                except ValueError:
+                    pass
+
+        if dst and dpt > 0:
+            connections.append(
+                Connection(
+                    pid=0,
+                    process_name="(iptables)",
+                    remote_ip=dst,
+                    remote_port=dpt,
+                    protocol="TCP",
+                    timestamp=now,
+                )
+            )
+
+    return connections
+
+
 class SandboxedInstall:
     """Run a package install inside a Docker container.
 
     The install command runs in an isolated container. Network connections
-    are monitored from outside via `docker exec ss -tnp`. If suspicious
+    are monitored from outside via docker exec and iptables LOG. If suspicious
     connections are detected, the container is killed and artifacts are
     NOT copied to the host.
 
@@ -408,24 +485,34 @@ class SandboxedInstall:
         logger.info(f"Sandbox: pulling {image}...")
 
         # Start container — run the command, then keep alive for monitoring.
+        # iptables LOG captures every outbound TCP SYN for post-hoc analysis
+        # (eliminates polling race condition). Falls back silently if unavailable.
+        iptables_setup = (
+            "iptables -A OUTPUT -p tcp --syn -j LOG "
+            "--log-prefix 'FENCELINE:' --log-level 4 2>/dev/null ; "
+        )
+
         # For pip, we also snapshot the pre-install package list so we can
         # diff it after install to know which packages were added.
         is_pip = tool_id in ("pip", "pip3")
         if is_pip:
             shell_cmd = (
-                "pip list --format=json > /tmp/.fenceline-pre-packages.json 2>/dev/null ; "
-                f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
-                f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
+                iptables_setup
+                + "pip list --format=json > /tmp/.fenceline-pre-packages.json 2>/dev/null ; "
+                + f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
+                + f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
             )
         else:
             shell_cmd = (
-                f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
-                f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
+                iptables_setup
+                + f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
+                + f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
             )
         try:
             start_result = subprocess.run(
                 [
                     _docker(), "run", "-d",
+                    "--cap-add=NET_ADMIN",
                     "-w", "/app",
                     image,
                     "sh", "-c", shell_cmd,

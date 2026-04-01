@@ -7,6 +7,7 @@ from fenceline.install.sandbox import (
     docker_available,
     detect_image,
     parse_ss_output,
+    parse_iptables_log,
     SandboxedInstall,
     ContainerMonitor,
     _safe_package_name,
@@ -127,6 +128,56 @@ class TestParseSsOutput:
 
     def test_header_only(self):
         assert parse_ss_output("State Recv-Q Send-Q Local Peer Process\n") == []
+
+
+# --- parse_iptables_log ---
+
+
+class TestParseIptablesLog:
+    SAMPLE_DMESG = (
+        "[  123.456] random kernel message\n"
+        "[  124.789] FENCELINE:IN= OUT=eth0 SRC=172.17.0.2 DST=93.184.216.34 "
+        "LEN=60 TOS=0x00 PREC=0x00 TTL=64 ID=12345 DF PROTO=TCP "
+        "SPT=45678 DPT=8080 WINDOW=29200 RES=0x00 SYN URGP=0\n"
+        "[  125.012] FENCELINE:IN= OUT=eth0 SRC=172.17.0.2 DST=104.16.1.34 "
+        "LEN=60 TOS=0x00 PREC=0x00 TTL=64 ID=12346 DF PROTO=TCP "
+        "SPT=45679 DPT=443 WINDOW=29200 RES=0x00 SYN URGP=0\n"
+    )
+
+    def test_parses_connections(self):
+        conns = parse_iptables_log(self.SAMPLE_DMESG)
+        assert len(conns) == 2
+
+    def test_extracts_ip_and_port(self):
+        conns = parse_iptables_log(self.SAMPLE_DMESG)
+        assert conns[0].remote_ip == "93.184.216.34"
+        assert conns[0].remote_port == 8080
+        assert conns[1].remote_ip == "104.16.1.34"
+        assert conns[1].remote_port == 443
+
+    def test_empty_output(self):
+        assert parse_iptables_log("") == []
+
+    def test_no_fenceline_lines(self):
+        output = "[  123.456] generic kernel message\n[  124.789] another message\n"
+        assert parse_iptables_log(output) == []
+
+    def test_mixed_output(self):
+        output = (
+            "lots of kernel noise\n"
+            "FENCELINE:IN= OUT=eth0 SRC=10.0.0.1 DST=8.8.8.8 "
+            "PROTO=TCP SPT=1234 DPT=53\n"
+            "more noise\n"
+        )
+        conns = parse_iptables_log(output)
+        assert len(conns) == 1
+        assert conns[0].remote_ip == "8.8.8.8"
+        assert conns[0].remote_port == 53
+
+    def test_malformed_dpt_ignored(self):
+        output = "FENCELINE:IN= OUT=eth0 DST=1.2.3.4 DPT=notanumber\n"
+        conns = parse_iptables_log(output)
+        assert len(conns) == 0  # DPT parse fails, no connection created
 
 
 # --- SandboxedInstall ---
