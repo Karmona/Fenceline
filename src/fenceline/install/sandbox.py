@@ -23,6 +23,9 @@ from typing import List, Optional, Tuple
 from fenceline.deepmap.models import DeepMap
 from fenceline.install.fsdiff import snapshot_container, diff_snapshots, check_suspicious_files, FsAlert
 from fenceline.install.matcher import check_connection
+from fenceline.log import get_logger
+
+logger = get_logger(__name__)
 from fenceline.install.monitor import Alert, Connection
 
 
@@ -100,8 +103,7 @@ def _host_pip_destination() -> Path:
             return Path(site_packages)
     except (KeyError, TypeError):
         pass
-    print("[fenceline] Warning: no virtualenv detected, copying to current directory.",
-          file=sys.stderr)
+    logger.warning("No virtualenv detected, copying to current directory.")
     return Path.cwd()
 
 
@@ -227,7 +229,7 @@ class ContainerMonitor:
                     if alert is not None:
                         self._alerts.append(alert)
             except Exception as exc:
-                print(f"[fenceline] Warning: container monitor error: {exc}", file=sys.stderr)
+                logger.warning(f"Container monitor error: {exc}")
 
             time.sleep(self._poll_interval)
 
@@ -399,11 +401,11 @@ class SandboxedInstall:
         monitor_secs = self._monitor_seconds
 
         if tool_id in _EXPERIMENTAL_TOOLS:
-            print(f"[fenceline] Note: {tool_id} sandbox support is experimental.", file=sys.stderr)
-            print(f"[fenceline] Network monitoring works but artifact copy is limited.", file=sys.stderr)
-            print(f"[fenceline] If clean, re-run '{' '.join(cmd)}' on host to install.", file=sys.stderr)
+            logger.warning(f"{tool_id} sandbox support is experimental.")
+            logger.warning(f"Network monitoring works but artifact copy is limited.")
+            logger.warning(f"If clean, re-run '{' '.join(cmd)}' on host to install.")
 
-        print(f"[fenceline] Sandbox: pulling {image}...")
+        logger.info(f"Sandbox: pulling {image}...")
 
         # Start container — run the command, then keep alive for monitoring.
         # For pip, we also snapshot the pre-install package list so we can
@@ -433,16 +435,16 @@ class SandboxedInstall:
                 timeout=60,
             )
         except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-            print(f"[fenceline] Failed to start container: {exc}", file=sys.stderr)
+            logger.error(f"Failed to start container: {exc}")
             return [], 1
 
         if start_result.returncode != 0:
-            print(f"[fenceline] Docker error: {start_result.stderr.strip()}", file=sys.stderr)
+            logger.error(f"Docker error: {start_result.stderr.strip()}")
             return [], 1
 
         self._container_id = start_result.stdout.strip()[:12]
-        print(f"[fenceline] Sandbox: container {self._container_id} started")
-        print(f"[fenceline] Sandbox: running {' '.join(cmd)} inside container...")
+        logger.info(f"Sandbox: container {self._container_id} started")
+        logger.info(f"Sandbox: running {' '.join(cmd)} inside container...")
 
         # Snapshot filesystem before install for diffing
         pre_snapshot = snapshot_container(_docker(), self._container_id)
@@ -456,7 +458,7 @@ class SandboxedInstall:
 
         # Wait for the container to finish using Popen (non-blocking wait
         # via communicate) so the monitor thread can poll connections.
-        print(f"[fenceline] Sandbox: monitoring network for ~{monitor_secs}s...")
+        logger.info(f"Sandbox: monitoring network for ~{monitor_secs}s...")
         try:
             wait_proc = subprocess.Popen(
                 [_docker(), "wait", self._container_id],
@@ -469,7 +471,7 @@ class SandboxedInstall:
             except (ValueError, TypeError):
                 exit_code = 0
         except subprocess.TimeoutExpired:
-            print(f"[fenceline] Sandbox: timeout after {self._timeout}s — killing container")
+            logger.warning(f"Sandbox: timeout after {self._timeout}s — killing container")
             self._kill_container()
             alerts = monitor.stop()
             return alerts, 124  # timeout exit code
@@ -510,11 +512,10 @@ class SandboxedInstall:
         # install. The container is still alive (sleep period).
         pkg_name = _extract_package_name(cmd)
         if pkg_name and not _safe_package_name(pkg_name):
-            print(f"[fenceline] Warning: skipping import test — unusual package name",
-                  file=sys.stderr)
+            logger.warning("Skipping import test — unusual package name")
             pkg_name = None
         if pkg_name:
-            print(f"[fenceline] Sandbox: Stage 2 — testing import of '{pkg_name}'...")
+            logger.info(f"Sandbox: Stage 2 — testing import of '{pkg_name}'...")
             try:
                 if tool_id in ("npm", "npx", "yarn", "pnpm"):
                     subprocess.run(
@@ -546,7 +547,7 @@ class SandboxedInstall:
             return alerts, 1
 
         # Clean install — copy artifacts to host
-        print(f"[fenceline] Sandbox: install clean. Copying artifacts to host...")
+        logger.info("Sandbox: install clean. Copying artifacts to host...")
         copy_ok = True
         if is_pip:
             copy_ok = self._copy_pip_artifacts()
@@ -616,8 +617,7 @@ class SandboxedInstall:
                 p["name"].lower(): p["name"] for p in _json.loads(post_result.stdout)
             } if post_result.returncode == 0 and post_result.stdout.strip() else {}
         except (subprocess.TimeoutExpired, FileNotFoundError, _json.JSONDecodeError):
-            print("[fenceline] Warning: could not list pip packages in container",
-                  file=sys.stderr)
+            logger.warning("Could not list pip packages in container")
             return False
 
         new_packages = {
@@ -626,8 +626,7 @@ class SandboxedInstall:
         }
 
         if not new_packages:
-            print("[fenceline] Note: no new pip packages detected to copy.",
-                  file=sys.stderr)
+            logger.info("No new pip packages detected to copy.")
             return True
 
         # Find the site-packages directory inside the container
@@ -642,13 +641,12 @@ class SandboxedInstall:
             site_packages = ""
 
         if not site_packages:
-            print("[fenceline] Warning: could not determine site-packages path",
-                  file=sys.stderr)
+            logger.warning("Could not determine site-packages path")
             return False
 
         # Determine host destination — virtualenv site-packages if active, else cwd
         host_dest = _host_pip_destination()
-        print(f"[fenceline] Copying {len(new_packages)} new pip package(s) to {host_dest}...")
+        logger.info(f"Copying {len(new_packages)} new pip package(s) to {host_dest}...")
         all_ok = True
         for pkg_lower, pkg_original in new_packages.items():
             # pip normalizes names: requests -> requests/, but some use
@@ -674,8 +672,7 @@ class SandboxedInstall:
         Validates container_path before copying to prevent path traversal.
         """
         if not _validate_container_path(container_path):
-            print(f"[fenceline] Error: refusing to copy from unsafe path: {container_path}",
-                  file=sys.stderr)
+            logger.error(f"Refusing to copy from unsafe path: {container_path}")
             return False
         dest = str(host_dir) + "/"
         try:
@@ -686,15 +683,13 @@ class SandboxedInstall:
             )
             if result.returncode != 0:
                 stderr = result.stderr.decode("utf-8", errors="replace").strip()
-                print(f"[fenceline] Error: docker cp failed (exit {result.returncode})",
-                      file=sys.stderr)
+                logger.error(f"docker cp failed (exit {result.returncode})")
                 if stderr:
-                    print(f"[fenceline]   {stderr}", file=sys.stderr)
+                    logger.error(f"  {stderr}")
                 return False
             return True
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            print("[fenceline] Error: failed to copy artifacts from container",
-                  file=sys.stderr)
+            logger.error("Failed to copy artifacts from container")
             return False
 
     def _kill_container(self) -> None:

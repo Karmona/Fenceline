@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 from pathlib import Path
 from ipaddress import IPv6Network
 from typing import List, Optional
@@ -115,8 +116,7 @@ def load_maps(map_dir: Optional[Path] = None) -> DeepMap:
             try:
                 tools.append(load_tool(yaml_file))
             except Exception as exc:
-                import sys
-                print(f"[fenceline] Warning: failed to parse {yaml_file.name}: {exc}", file=sys.stderr)
+                logging.getLogger("fenceline").warning(f"Failed to parse {yaml_file.name}: {exc}")
 
     cdns_dir = map_dir / "cdns"
     if cdns_dir.is_dir():
@@ -124,7 +124,6 @@ def load_maps(map_dir: Optional[Path] = None) -> DeepMap:
             try:
                 cdns.append(load_cdn(yaml_file))
             except Exception as exc:
-                import sys
-                print(f"[fenceline] Warning: failed to parse {yaml_file.name}: {exc}", file=sys.stderr)
+                logging.getLogger("fenceline").warning(f"Failed to parse {yaml_file.name}: {exc}")
 
     return DeepMap(tools=tools, cdns=cdns)

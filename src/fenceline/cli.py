@@ -179,6 +179,11 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, 'no_color', False) or os.environ.get('NO_COLOR'):
         os.environ['NO_COLOR'] = '1'
 
+    # Configure logging (verbose flag may come from any subcommand)
+    from .log import setup_logging
+    verbose = getattr(args, 'verbose', False)
+    setup_logging(verbose=verbose)
+
     if not args.command:
         parser.print_help()
         return 0
