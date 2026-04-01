@@ -1,5 +1,5 @@
-name: 'Fenceline Supply Chain Check'
-description: 'Scan lockfile changes for supply chain risk signals'
+name: 'Fenceline Dependency Check'
+description: 'Scan lockfile changes for dependency risk signals'
 
 branding:
   icon: 'shield'
@@ -59,7 +59,7 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        COMMENT_MARKER="<!-- fenceline-supply-chain-check -->"
+        COMMENT_MARKER="<!-- fenceline-dependency-check -->"
         BODY="$COMMENT_MARKER
         $(cat "$RUNNER_TEMP/fenceline-output.md")"
 
