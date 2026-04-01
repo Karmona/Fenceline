@@ -59,13 +59,13 @@ def handle_connect(client, host, port):
                     if not data:
                         break
                     dst.sendall(data)
-            except Exception:
+            except (OSError, ConnectionError):
                 pass
             finally:
                 try: src.close()
-                except: pass
+                except OSError: pass
                 try: dst.close()
-                except: pass
+                except OSError: pass
         t1 = threading.Thread(target=relay, args=(client, remote), daemon=True)
         t2 = threading.Thread(target=relay, args=(remote, client), daemon=True)
         t1.start()
@@ -74,7 +74,7 @@ def handle_connect(client, host, port):
     except Exception as e:
         try:
             client.sendall(f"HTTP/1.1 502 Bad Gateway\\r\\n\\r\\n{e}".encode())
-        except:
+        except OSError:
             pass
 
 def handle_client(client):
@@ -105,10 +105,10 @@ def handle_client(client):
                     break
             log_request(method, host, path)
             client.close()
-    except Exception:
+    except (OSError, ConnectionError, ValueError):
         try:
             client.close()
-        except:
+        except OSError:
             pass
 
 def main():
@@ -161,11 +161,11 @@ server.on("connect", function(req, socket, head) {
     remote.pipe(socket);
     socket.pipe(remote);
   });
-  remote.on("error", function() {
-    try { socket.end(); } catch(e) {}
+  remote.on("error", function(err) {
+    try { socket.end(); } catch(ignored) { /* socket already closed */ }
   });
-  socket.on("error", function() {
-    try { remote.end(); } catch(e) {}
+  socket.on("error", function(err) {
+    try { remote.end(); } catch(ignored) { /* remote already closed */ }
   });
 });
 server.listen(8899, "127.0.0.1", function() {

@@ -2,7 +2,7 @@
 
 **A dependency firewall for developer machines.**
 
-This is a major release that makes Fenceline's Docker sandbox production-ready with 10 detection layers, full pip support, CI integration, and 352 tests (up from 83 in v0.5.0).
+This is a major release that makes Fenceline's Docker sandbox production-ready with 10 detection layers, full pip support, CI integration, and 386 tests (up from 83 in v0.5.0).
 
 ## Highlights
 
@@ -56,7 +56,7 @@ None. All existing commands work as before.
 
 ## Validation
 
-- **352 tests** across 21 test files (348 unit + 4 Docker integration)
+- **386 tests** across 24 test files (382 unit + 4 Docker integration)
 - **20/20 real-world packages validated** through Docker sandbox (10 npm + 10 pip, pinned versions, `--dry-run`)
 - **Zero false positives** across all validated packages
 - **All integration tests pass** -- real Docker end-to-end with clean install, JSON output, and blocked malicious package verification

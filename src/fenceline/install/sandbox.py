@@ -10,6 +10,7 @@ Requires Docker to be installed and running.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -24,7 +25,7 @@ from fenceline.deepmap.models import DeepMap
 from fenceline.install.fsdiff import snapshot_container, diff_snapshots, check_suspicious_files, FsAlert
 from fenceline.install.http_logger import PROXY_SCRIPT, NODE_PROXY_SCRIPT, parse_http_log, check_http_behavior
 from fenceline.install.matcher import check_connection
-from fenceline.install.monitor import Alert, Connection
+from fenceline.install.monitor import Alert, Connection, parse_iptables_log, parse_netstat_output, parse_ss_output
 from fenceline.log import get_logger
 
 logger = get_logger(__name__)
@@ -302,163 +303,6 @@ class ContainerMonitor:
         return parse_netstat_output(result.stdout)
 
 
-def parse_netstat_output(output: str) -> List[Connection]:
-    """Parse netstat -tnp output into Connection objects.
-
-    Alpine/BusyBox netstat format:
-    Proto Recv-Q Send-Q Local Address       Foreign Address     State       PID/Program name
-    tcp        0      0 172.17.0.2:34567    93.184.216.34:8080  ESTABLISHED 1/node
-    """
-    connections: List[Connection] = []
-    now = time.time()
-
-    for line in output.splitlines():
-        # Catch both ESTABLISHED and SYN_SENT (outbound attempt)
-        if "ESTABLISHED" not in line and "SYN_SENT" not in line:
-            continue
-
-        parts = line.split()
-        if len(parts) < 6:
-            continue
-
-        # Foreign address is column 4 (0-indexed)
-        foreign = parts[4]
-        colon_idx = foreign.rfind(":")
-        if colon_idx == -1:
-            continue
-
-        remote_ip = foreign[:colon_idx]
-        try:
-            remote_port = int(foreign[colon_idx + 1:])
-        except ValueError:
-            continue
-
-        # PID/Program is the last column: "1/node"
-        pid = 0
-        process_name = ""
-        pid_prog = parts[-1] if "/" in parts[-1] else ""
-        if pid_prog:
-            try:
-                pid_str, process_name = pid_prog.split("/", 1)
-                pid = int(pid_str)
-            except (ValueError, IndexError):
-                pass
-
-        connections.append(
-            Connection(
-                pid=pid,
-                process_name=process_name,
-                remote_ip=remote_ip,
-                remote_port=remote_port,
-                protocol="TCP",
-                timestamp=now,
-            )
-        )
-
-    return connections
-
-
-def parse_ss_output(output: str) -> List[Connection]:
-    """Parse ss -tnp output into Connection objects.
-
-    Extracted as a standalone function so it can be reused and tested
-    independently of the Docker exec mechanism.
-    """
-    connections: List[Connection] = []
-    now = time.time()
-
-    for line in output.splitlines():
-        if "ESTAB" not in line:
-            continue
-
-        parts = line.split()
-        if len(parts) < 5:
-            continue
-
-        # Peer address is column 4 (0-indexed)
-        peer = parts[4]
-        colon_idx = peer.rfind(":")
-        if colon_idx == -1:
-            continue
-
-        remote_ip = peer[:colon_idx].strip("[]")
-        try:
-            remote_port = int(peer[colon_idx + 1:])
-        except ValueError:
-            continue
-
-        # Process info: users:(("name",pid=N,...))
-        pid = 0
-        process_name = ""
-        for p in parts:
-            if "pid=" in p:
-                try:
-                    pid = int(p.split("pid=")[1].split(",")[0].split(")")[0])
-                except (ValueError, IndexError):
-                    pass
-            if p.startswith("users:"):
-                try:
-                    process_name = p.split('"')[1]
-                except IndexError:
-                    pass
-
-        connections.append(
-            Connection(
-                pid=pid,
-                process_name=process_name,
-                remote_ip=remote_ip,
-                remote_port=remote_port,
-                protocol="TCP",
-                timestamp=now,
-            )
-        )
-
-    return connections
-
-
-def parse_iptables_log(output: str) -> List[Connection]:
-    """Parse iptables LOG output from dmesg for outbound TCP SYN packets.
-
-    Expected format (from --log-prefix 'FENCELINE:'):
-      FENCELINE:IN= OUT=eth0 SRC=172.17.0.2 DST=93.184.216.34 ...
-      PROTO=TCP SPT=45678 DPT=443 ...
-
-    This captures EVERY outbound connection attempt with zero race condition,
-    complementing the netstat polling which can miss short-lived connections.
-    """
-    connections: List[Connection] = []
-    now = time.time()
-
-    for line in output.splitlines():
-        if "FENCELINE:" not in line:
-            continue
-
-        dst = ""
-        dpt = 0
-        for token in line.split():
-            if token.startswith("DST="):
-                dst = token[4:]
-            elif token.startswith("DPT="):
-                try:
-                    dpt = int(token[4:])
-                except ValueError:
-                    pass
-
-        if dst and dpt > 0:
-            connections.append(
-                Connection(
-                    pid=0,
-                    process_name="(iptables)",
-                    remote_ip=dst,
-                    remote_port=dpt,
-                    protocol="TCP",
-                    timestamp=now,
-                )
-            )
-
-    return connections
-
-
 class SandboxedInstall:
     """Run a package install inside a Docker container.
 
@@ -488,23 +332,75 @@ class SandboxedInstall:
         are NOT copied to the host.
 
         The container runs the install command plus a monitoring period
-        (default 10 seconds) during which network connections are observed.
+        during which network connections are observed through 10 layers.
         """
         image = detect_image(cmd)
         tool_id = cmd[0].lower() if cmd else "unknown"
-        monitor_secs = self._monitor_seconds
+        is_pip = tool_id in ("pip", "pip3")
+        is_node = tool_id in ("npm", "npx", "yarn", "pnpm")
 
         if tool_id in _EXPERIMENTAL_TOOLS:
             logger.warning(f"{tool_id} sandbox support is experimental.")
             logger.warning(f"Network monitoring works but artifact copy is limited.")
             logger.warning(f"If clean, re-run '{' '.join(cmd)}' on host to install.")
 
+        # Phase 1: Start container with iptables + proxy + sleep
+        ok = self._start_container(image, tool_id, is_pip, is_node)
+        if not ok:
+            return [], 1
+
+        # Phase 2: Snapshot filesystem, start monitor, run install
+        pre_snapshot = snapshot_container(_docker(), self._container_id)
+        monitor = ContainerMonitor(
+            self._container_id, self._deep_map, tool_id, poll_interval=0.5,
+        )
+        monitor.start()
+
+        exit_code = self._exec_install(cmd, is_pip, is_node)
+        if exit_code in (124, 130):  # timeout or interrupt
+            alerts = monitor.stop()
+            return alerts, exit_code
+
+        # Brief monitoring period after install completes
+        time.sleep(min(self._monitor_seconds, 5))
+
+        # Phase 3: Stage 1 — check install-time network alerts
+        blocked = self._check_stage1(monitor)
+        if blocked is not None:
+            return blocked
+
+        # Phase 4: Filesystem diff — detect suspicious changes
+        blocked = self._check_filesystem(pre_snapshot, monitor, tool_id)
+        if blocked is not None:
+            return blocked
+
+        # Phase 5: Stage 2 — import test (catches lazy payloads)
+        pkg_name = self._run_stage2_import(cmd, tool_id)
+
+        # Phase 6: Final alert check (both stages combined)
+        alerts = monitor.stop()
+        if alerts:
+            stage = "Stage 2 (import)" if pkg_name else "install"
+            self._print_alerts(stage, alerts)
+            self._block_and_kill()
+            return alerts, 1
+
+        # Phase 7: DNS + HTTP behavior checks (informational)
+        self._check_dns_http(tool_id, is_pip, is_node)
+
+        # Phase 8: Promote artifacts to host (unless dry-run)
+        return self._promote_artifacts(alerts, exit_code, tool_id, is_pip)
+
+    # ----- Container lifecycle helpers -----
+
+    def _start_container(self, image: str, tool_id: str,
+                         is_pip: bool, is_node: bool) -> bool:
+        """Start a long-lived container with iptables, proxy, and sleep.
+
+        Returns True if started successfully, False otherwise.
+        """
         logger.info(f"Sandbox: pulling {image}...")
 
-        # Start a long-lived container with iptables setup, proxy, and sleep.
-        # The install runs via docker exec so the container stays alive for
-        # post-install checks (Stage 2, filesystem diff, DNS/HTTP analysis,
-        # artifact copy). Without this, docker exec fails on a stopped container.
         iptables_setup = (
             "iptables -A OUTPUT -p tcp --syn -j LOG "
             "--log-prefix 'FENCELINE:' --log-level 4 2>/dev/null ; "
@@ -512,32 +408,7 @@ class SandboxedInstall:
             "--log-prefix 'FENCELINE_DNS:' --log-level 4 2>/dev/null ; "
         )
 
-        # HTTP logging proxy setup — captures CONNECT targets and HTTP methods.
-        # Python containers use a Python proxy script; Node containers use a
-        # Node.js proxy script. Both log to /tmp/fenceline-http.log.
-        is_pip = tool_id in ("pip", "pip3")
-        is_node = tool_id in ("npm", "npx", "yarn", "pnpm")
-        proxy_setup = ""
-        if is_pip:
-            escaped_script = PROXY_SCRIPT.replace("'", "'\\''")
-            proxy_setup = (
-                f"echo '{escaped_script}' > /tmp/fenceline-proxy.py ; "
-                "python3 /tmp/fenceline-proxy.py & "
-                "export HTTP_PROXY=http://127.0.0.1:8899 ; "
-                "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
-            )
-        elif is_node:
-            escaped_script = NODE_PROXY_SCRIPT.replace("'", "'\\''")
-            proxy_setup = (
-                f"echo '{escaped_script}' > /tmp/fenceline-proxy.js ; "
-                "node /tmp/fenceline-proxy.js & "
-                "sleep 0.2 ; "  # brief wait for proxy to bind
-                "export HTTP_PROXY=http://127.0.0.1:8899 ; "
-                "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
-            )
-
-        # The container runs setup (iptables, proxy, pre-install snapshot)
-        # then stays alive with sleep. Install runs via docker exec.
+        proxy_setup = self._build_proxy_setup(is_pip, is_node)
         pip_pre = ""
         if is_pip:
             pip_pre = "pip list --format=json > /tmp/.fenceline-pre-packages.json 2>/dev/null ; "
@@ -559,33 +430,46 @@ class SandboxedInstall:
             )
         except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
             logger.error(f"Failed to start container: {exc}")
-            return [], 1
+            return False
 
         if start_result.returncode != 0:
             logger.error(f"Docker error: {start_result.stderr.strip()}")
-            return [], 1
+            return False
 
         self._container_id = start_result.stdout.strip()[:12]
         logger.info(f"Sandbox: container {self._container_id} started")
+        return True
+
+    def _build_proxy_setup(self, is_pip: bool, is_node: bool) -> str:
+        """Build the shell commands to start the HTTP logging proxy."""
+        if is_pip:
+            escaped_script = PROXY_SCRIPT.replace("'", "'\\''")
+            return (
+                f"echo '{escaped_script}' > /tmp/fenceline-proxy.py ; "
+                "python3 /tmp/fenceline-proxy.py & "
+                "export HTTP_PROXY=http://127.0.0.1:8899 ; "
+                "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
+            )
+        elif is_node:
+            escaped_script = NODE_PROXY_SCRIPT.replace("'", "'\\''")
+            return (
+                f"echo '{escaped_script}' > /tmp/fenceline-proxy.js ; "
+                "node /tmp/fenceline-proxy.js & "
+                "sleep 0.2 ; "  # brief wait for proxy to bind
+                "export HTTP_PROXY=http://127.0.0.1:8899 ; "
+                "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
+            )
+        return ""
+
+    def _exec_install(self, cmd: list[str], is_pip: bool, is_node: bool) -> int:
+        """Run the install command inside the container via docker exec.
+
+        Returns exit code (124 for timeout, 130 for interrupt).
+        """
         logger.info(f"Sandbox: running {' '.join(cmd)} inside container...")
+        logger.info(f"Sandbox: monitoring network for ~{self._monitor_seconds}s...")
 
-        # Snapshot filesystem before install for diffing
-        pre_snapshot = snapshot_container(_docker(), self._container_id)
-
-        # Start network monitor
-        monitor = ContainerMonitor(
-            self._container_id, self._deep_map, tool_id,
-            poll_interval=0.5,
-        )
-        monitor.start()
-
-        # Run the install command inside the running container.
-        # The container stays alive after this, so docker exec works
-        # for all post-install checks.
-        logger.info(f"Sandbox: monitoring network for ~{monitor_secs}s...")
         install_cmd_str = ' '.join(shlex.quote(c) for c in cmd)
-        # docker exec starts a new shell — proxy env vars from the setup
-        # shell aren't inherited, so set them explicitly.
         proxy_env = ""
         if is_pip or is_node:
             proxy_env = (
@@ -593,6 +477,7 @@ class SandboxedInstall:
                 "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
             )
         exec_cmd = proxy_env + install_cmd_str
+
         try:
             install_result = subprocess.run(
                 [_docker(), "exec", self._container_id,
@@ -601,101 +486,97 @@ class SandboxedInstall:
                 text=True,
                 timeout=self._timeout,
             )
-            exit_code = install_result.returncode
+            return install_result.returncode
         except subprocess.TimeoutExpired:
             logger.warning(f"Sandbox: timeout after {self._timeout}s — killing container")
             self._kill_container()
-            alerts = monitor.stop()
-            return alerts, 124  # timeout exit code
+            return 124
         except KeyboardInterrupt:
             print("\n[fenceline] Interrupted — killing container")
             self._kill_container()
-            alerts = monitor.stop()
-            return alerts, 130
+            return 130
 
-        # Brief monitoring period after install completes
-        time.sleep(min(monitor_secs, 5))
+    # ----- Detection layer checks -----
 
-        # --- Stage 1 complete: check for install-time alerts ---
+    def _check_stage1(self, monitor: 'ContainerMonitor') -> Optional[Tuple[List[Alert], int]]:
+        """Check for install-time network alerts.
+
+        Returns (alerts, 1) if blocked, None if clean.
+        """
         stage1_alerts = list(monitor._alerts)
-
         if stage1_alerts:
             alerts = monitor.stop()
             self._print_alerts("Stage 1 (install)", alerts)
-            print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
+            self._block_and_kill()
+            return alerts, 1
+        return None
+
+    def _check_filesystem(self, pre_snapshot, monitor: 'ContainerMonitor',
+                          tool_id: str) -> Optional[Tuple[List[Alert], int]]:
+        """Check for suspicious filesystem changes.
+
+        Returns (alerts, 1) if blocked, None if clean.
+        """
+        if not pre_snapshot:
+            return None
+        post_snapshot = snapshot_container(_docker(), self._container_id)
+        if not post_snapshot:
+            return None
+
+        added, _, modified = diff_snapshots(pre_snapshot, post_snapshot)
+        fs_alerts = check_suspicious_files(added, modified, tool_id)
+        if fs_alerts:
+            alerts = monitor.stop()
+            self._print_fs_alerts(fs_alerts)
+            print(f"\n[fenceline] Sandbox: BLOCKED — suspicious filesystem changes.")
             print(f"[fenceline] ACTION: Do not retry or bypass. Investigate the package before use.")
             self._kill_container()
             return alerts, 1
+        return None
 
-        # --- Filesystem diff: check for suspicious file changes ---
-        if pre_snapshot:
-            post_snapshot = snapshot_container(_docker(), self._container_id)
-            if post_snapshot:
-                added, _, modified = diff_snapshots(pre_snapshot, post_snapshot)
-                fs_alerts = check_suspicious_files(added, modified, tool_id)
-                if fs_alerts:
-                    alerts = monitor.stop()
-                    self._print_fs_alerts(fs_alerts)
-                    print(f"\n[fenceline] Sandbox: BLOCKED — suspicious filesystem changes.")
-                    print(f"[fenceline] ACTION: Do not retry or bypass. Investigate the package before use.")
-                    self._kill_container()
-                    return alerts, 1
+    def _run_stage2_import(self, cmd: list[str], tool_id: str) -> Optional[str]:
+        """Run Stage 2 import test inside the container.
 
-        # --- Stage 2: Import test ---
-        # After install looks clean, try importing the package inside the
-        # container. Many attacks activate on require()/import, not during
-        # install. The container is still alive (sleep period).
+        Returns the package name if import was attempted, None otherwise.
+        """
         pkg_name = _extract_package_name(cmd)
         if pkg_name and not _safe_package_name(pkg_name):
             logger.warning("Skipping import test — unusual package name")
             pkg_name = None
-        if pkg_name:
-            logger.info(f"Sandbox: Stage 2 — testing import of '{pkg_name}'...")
-            try:
-                if tool_id in ("npm", "npx", "yarn", "pnpm"):
+        if not pkg_name:
+            return None
+
+        logger.info(f"Sandbox: Stage 2 — testing import of '{pkg_name}'...")
+        try:
+            if tool_id in ("npm", "npx", "yarn", "pnpm"):
+                subprocess.run(
+                    [_docker(), "exec", self._container_id,
+                     "node", "-e", f"require('{pkg_name}')"],
+                    capture_output=True, timeout=30,
+                )
+            elif tool_id in ("pip", "pip3"):
+                import_name = self._resolve_pip_import_name(pkg_name)
+                if import_name:
                     subprocess.run(
                         [_docker(), "exec", self._container_id,
-                         "node", "-e", f"require('{pkg_name}')"],
+                         "python3", "-c", f"import {import_name}"],
                         capture_output=True, timeout=30,
                     )
-                elif tool_id in ("pip", "pip3"):
-                    # Distribution names often differ from import names:
-                    # e.g., google-auth → google.auth, Pillow → PIL
-                    # Common case: hyphens become underscores in Python imports.
-                    # Try the top_level.txt from metadata first, fall back to
-                    # hyphen→underscore, then original name.
-                    import_name = self._resolve_pip_import_name(pkg_name)
-                    if import_name:
-                        subprocess.run(
-                            [_docker(), "exec", self._container_id,
-                             "python3", "-c", f"import {import_name}"],
-                            capture_output=True, timeout=30,
-                        )
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                pass
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
 
-            # Give monitor time to catch import-triggered connections
-            time.sleep(5)
+        # Give monitor time to catch import-triggered connections
+        time.sleep(5)
+        return pkg_name
 
-        # --- Final check: all alerts from both stages ---
-        alerts = monitor.stop()
-
-        if alerts:
-            stage = "Stage 2 (import)" if pkg_name else "install"
-            self._print_alerts(stage, alerts)
-            print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
-            print(f"[fenceline] ACTION: Do not retry or bypass. Investigate the package before use.")
-            self._kill_container()
-            return alerts, 1
-
-        # --- DNS activity check (informational) ---
+    def _check_dns_http(self, tool_id: str, is_pip: bool, is_node: bool) -> None:
+        """Run DNS and HTTP behavior checks (informational, non-blocking)."""
         from fenceline.install.dns_monitor import get_dns_queries_from_container, check_dns_activity
         dns_servers = get_dns_queries_from_container(_docker(), self._container_id)
         dns_warning = check_dns_activity(dns_servers)
         if dns_warning:
             logger.warning(f"DNS: {dns_warning}")
 
-        # --- HTTP behavior check (for containers with proxy) ---
         if is_pip or is_node:
             try:
                 http_result = subprocess.run(
@@ -711,7 +592,9 @@ class SandboxedInstall:
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass
 
-        # Clean install — copy artifacts to host (unless dry-run)
+    def _promote_artifacts(self, alerts: List[Alert], exit_code: int,
+                           tool_id: str, is_pip: bool) -> Tuple[List[Alert], int]:
+        """Copy artifacts to host or report dry-run. Returns final (alerts, exit_code)."""
         if self._dry_run:
             logger.info("Sandbox: install clean. Dry-run mode — skipping artifact copy.")
             self._kill_container()
@@ -736,6 +619,12 @@ class SandboxedInstall:
         self._kill_container()
         print(f"[fenceline] Sandbox: done. Install verified and applied.")
         return alerts, exit_code
+
+    def _block_and_kill(self) -> None:
+        """Print standard block message and kill the container."""
+        print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
+        print(f"[fenceline] ACTION: Do not retry or bypass. Investigate the package before use.")
+        self._kill_container()
 
     def _print_alerts(self, stage: str, alerts: List[Alert]) -> None:
         """Print alert details."""
@@ -762,7 +651,7 @@ class SandboxedInstall:
         Diffs pre-install and post-install pip list to find new packages,
         then copies only those packages' directories.
         """
-        import json as _json
+        # Uses module-level json import
 
         # Read pre-install package list saved by the container startup command
         try:
@@ -772,9 +661,9 @@ class SandboxedInstall:
                 capture_output=True, text=True, timeout=10,
             )
             pre_packages = {
-                p["name"].lower() for p in _json.loads(pre_result.stdout)
+                p["name"].lower() for p in json.loads(pre_result.stdout)
             } if pre_result.returncode == 0 and pre_result.stdout.strip() else set()
-        except (subprocess.TimeoutExpired, FileNotFoundError, _json.JSONDecodeError):
+        except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
             pre_packages = set()
 
         # Get post-install package list
@@ -785,9 +674,9 @@ class SandboxedInstall:
                 capture_output=True, text=True, timeout=10,
             )
             post_packages = {
-                p["name"].lower(): p["name"] for p in _json.loads(post_result.stdout)
+                p["name"].lower(): p["name"] for p in json.loads(post_result.stdout)
             } if post_result.returncode == 0 and post_result.stdout.strip() else {}
-        except (subprocess.TimeoutExpired, FileNotFoundError, _json.JSONDecodeError):
+        except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
             logger.warning("Could not list pip packages in container")
             return False
 

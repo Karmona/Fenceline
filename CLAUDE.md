@@ -71,8 +71,8 @@ Levels: LOW (0-15), MEDIUM (16-35), HIGH (36-60), CRITICAL (61+)
 
 ```bash
 pip install -e ".[dev]"
-python3 -m pytest tests/ -v -m "not integration"   # 348 unit tests
-python3 -m pytest tests/integration/ -v             # 4 Docker integration tests (352 total)
+python3 -m pytest tests/ -v -m "not integration"   # 382 unit tests
+python3 -m pytest tests/integration/ -v             # 4 Docker integration tests (386 total)
 cd examples/safe-project && ./test.sh               # local end-to-end
 fenceline --version                                  # should show 0.6.0
 ```
@@ -125,8 +125,8 @@ src/fenceline/
 └── init/hooks.py             # Git hook installer
 
 map/                          # Network baselines (8 tools, 4 CDNs)
-tests/                        # 348 unit tests (20 files)
-tests/integration/            # 4 Docker integration tests (352 total, 21 files)
+tests/                        # 382 unit tests (23 files)
+tests/integration/            # 4 Docker integration tests (386 total, 24 files)
 examples/safe-project/        # Local verification project
 exploits/                     # 11 attack case studies (2018-2026)
 docs/                         # Landscape, playbook, newsroom, guide

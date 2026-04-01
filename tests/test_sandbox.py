@@ -6,13 +6,11 @@ import subprocess
 from fenceline.install.sandbox import (
     docker_available,
     detect_image,
-    parse_ss_output,
-    parse_iptables_log,
     SandboxedInstall,
     ContainerMonitor,
     _safe_package_name,
 )
-from fenceline.install.monitor import Connection
+from fenceline.install.monitor import Connection, parse_ss_output, parse_iptables_log
 
 
 # --- _safe_package_name ---

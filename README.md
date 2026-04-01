@@ -181,7 +181,7 @@ cd examples/safe-project
 |-------|--------|------|
 | Core Engine | Done | Docker sandbox, 2-stage monitoring, filesystem diffing, iptables LOG capture |
 | Detection | Done | CDN fingerprinting, expected-process heuristic, DNS monitoring, HTTP proxy analysis |
-| CLI Tools | Done | wrap (npm + pip), install (--format json, --dry-run), check (cached, --fail-on), map, audit-actions, init. 352 tests. |
+| CLI Tools | Done | wrap (npm + pip), install (--format json, --dry-run), check (cached, --fail-on), map, audit-actions, init. 386 tests. |
 | Ecosystem | Done | Node.js production-ready, Python pip fully supported (import resolution, console scripts), others experimental |
 | Knowledge Base | Done | 11 exploit case studies, defense playbook, tool landscape |
 | Next | Planned | CI enforcement mode, deeper HTTP payload analysis, eBPF tracing |

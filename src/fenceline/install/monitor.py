@@ -33,6 +33,162 @@ class Alert:
     severity: str  # "warning" | "critical"
 
 
+def parse_netstat_output(output: str) -> List[Connection]:
+    """Parse netstat -tnp output into Connection objects.
+
+    Alpine/BusyBox netstat format:
+    Proto Recv-Q Send-Q Local Address       Foreign Address     State       PID/Program name
+    tcp        0      0 172.17.0.2:34567    93.184.216.34:8080  ESTABLISHED 1/node
+    """
+    connections: List[Connection] = []
+    now = time.time()
+
+    for line in output.splitlines():
+        # Catch both ESTABLISHED and SYN_SENT (outbound attempt)
+        if "ESTABLISHED" not in line and "SYN_SENT" not in line:
+            continue
+
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+
+        # Foreign address is column 4 (0-indexed)
+        foreign = parts[4]
+        colon_idx = foreign.rfind(":")
+        if colon_idx == -1:
+            continue
+
+        remote_ip = foreign[:colon_idx]
+        try:
+            remote_port = int(foreign[colon_idx + 1:])
+        except ValueError:
+            continue
+
+        # PID/Program is the last column: "1/node"
+        pid = 0
+        process_name = ""
+        pid_prog = parts[-1] if "/" in parts[-1] else ""
+        if pid_prog:
+            try:
+                pid_str, process_name = pid_prog.split("/", 1)
+                pid = int(pid_str)
+            except (ValueError, IndexError):
+                pass
+
+        connections.append(
+            Connection(
+                pid=pid,
+                process_name=process_name,
+                remote_ip=remote_ip,
+                remote_port=remote_port,
+                protocol="TCP",
+                timestamp=now,
+            )
+        )
+
+    return connections
+
+
+def parse_ss_output(output: str) -> List[Connection]:
+    """Parse ss -tnp output into Connection objects.
+
+    Works for both host-side and container-side ss output.
+    """
+    connections: List[Connection] = []
+    now = time.time()
+
+    for line in output.splitlines():
+        if "ESTAB" not in line:
+            continue
+
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+
+        # Peer address is column 4 (0-indexed)
+        peer = parts[4]
+        colon_idx = peer.rfind(":")
+        if colon_idx == -1:
+            continue
+
+        remote_ip = peer[:colon_idx].strip("[]")
+        try:
+            remote_port = int(peer[colon_idx + 1:])
+        except ValueError:
+            continue
+
+        # Process info: users:(("name",pid=N,...))
+        pid = 0
+        process_name = ""
+        for p in parts:
+            if "pid=" in p:
+                try:
+                    pid = int(p.split("pid=")[1].split(",")[0].split(")")[0])
+                except (ValueError, IndexError):
+                    pass
+            if p.startswith("users:"):
+                try:
+                    process_name = p.split('"')[1]
+                except IndexError:
+                    pass
+
+        connections.append(
+            Connection(
+                pid=pid,
+                process_name=process_name,
+                remote_ip=remote_ip,
+                remote_port=remote_port,
+                protocol="TCP",
+                timestamp=now,
+            )
+        )
+
+    return connections
+
+
+def parse_iptables_log(output: str) -> List[Connection]:
+    """Parse iptables LOG output from dmesg for outbound TCP SYN packets.
+
+    Expected format (from --log-prefix 'FENCELINE:'):
+      FENCELINE:IN= OUT=eth0 SRC=172.17.0.2 DST=93.184.216.34 ...
+      PROTO=TCP SPT=45678 DPT=443 ...
+
+    This captures EVERY outbound connection attempt with zero race condition,
+    complementing the netstat polling which can miss short-lived connections.
+    """
+    connections: List[Connection] = []
+    now = time.time()
+
+    for line in output.splitlines():
+        if "FENCELINE:" not in line:
+            continue
+
+        dst = ""
+        dpt = 0
+        for token in line.split():
+            if token.startswith("DST="):
+                dst = token[4:]
+            elif token.startswith("DPT="):
+                try:
+                    dpt = int(token[4:])
+                except ValueError:
+                    pass
+
+        if dst and dpt > 0:
+            connections.append(
+                Connection(
+                    pid=0,
+                    process_name="(iptables)",
+                    remote_ip=dst,
+                    remote_port=dpt,
+                    protocol="TCP",
+                    timestamp=now,
+                )
+            )
+
+    return connections
+
+
 class NetworkMonitor:
     """Monitor network connections during package installs.
 
@@ -89,7 +245,6 @@ class NetworkMonitor:
                         self._alerts.append(alert)
 
             except Exception as exc:
-                import sys
                 print(f"[fenceline] Warning: monitor poll error: {exc}", file=sys.stderr)
 
             time.sleep(self._poll_interval)
@@ -218,58 +373,4 @@ class NetworkMonitor:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return []
 
-        connections: List[Connection] = []
-        now = time.time()
-
-        for line in result.stdout.splitlines():
-            if "ESTAB" not in line:
-                continue
-
-            parts = line.split()
-            if len(parts) < 5:
-                continue
-
-            # Peer address is column 4 (0-indexed)
-            peer = parts[4]
-
-            # Parse peer address — last colon separates port
-            colon_idx = peer.rfind(":")
-            if colon_idx == -1:
-                continue
-            remote_ip = peer[:colon_idx]
-            try:
-                remote_port = int(peer[colon_idx + 1:])
-            except ValueError:
-                continue
-
-            # Strip brackets from IPv6
-            remote_ip = remote_ip.strip("[]")
-
-            # Process info: users:(("name",pid=N,...))
-            pid = 0
-            process_name = ""
-            for p in parts:
-                if "pid=" in p:
-                    try:
-                        pid_str = p.split("pid=")[1].split(",")[0].split(")")[0]
-                        pid = int(pid_str)
-                    except (ValueError, IndexError):
-                        pass
-                if p.startswith("users:"):
-                    try:
-                        process_name = p.split('"')[1]
-                    except IndexError:
-                        pass
-
-            connections.append(
-                Connection(
-                    pid=pid,
-                    process_name=process_name,
-                    remote_ip=remote_ip,
-                    remote_port=remote_port,
-                    protocol="TCP",
-                    timestamp=now,
-                )
-            )
-
-        return connections
+        return parse_ss_output(result.stdout)
