@@ -2,8 +2,8 @@
 
 Runs package installs inside a Docker container so untrusted code never
 executes on the host machine. Monitors the container's network activity
-from outside and only copies install artifacts to the host if no
-suspicious connections are detected.
+and filesystem changes from outside, and only copies install artifacts
+to the host if no suspicious behavior is detected.
 
 Requires Docker to be installed and running.
 """
@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fenceline.deepmap.models import DeepMap
+from fenceline.install.fsdiff import snapshot_container, diff_snapshots, check_suspicious_files, FsAlert
 from fenceline.install.matcher import check_connection
 from fenceline.install.monitor import Alert, Connection
 
@@ -388,6 +389,9 @@ class SandboxedInstall:
         print(f"[fenceline] Sandbox: container {self._container_id} started")
         print(f"[fenceline] Sandbox: running {' '.join(cmd)} inside container...")
 
+        # Snapshot filesystem before install for diffing
+        pre_snapshot = snapshot_container(_docker(), self._container_id)
+
         # Start network monitor
         monitor = ContainerMonitor(
             self._container_id, self._deep_map, tool_id,
@@ -429,6 +433,19 @@ class SandboxedInstall:
             print(f"\n[fenceline] Sandbox: BLOCKED — not installing on your machine.")
             self._kill_container()
             return alerts, 1
+
+        # --- Filesystem diff: check for suspicious file changes ---
+        if pre_snapshot:
+            post_snapshot = snapshot_container(_docker(), self._container_id)
+            if post_snapshot:
+                added, _, modified = diff_snapshots(pre_snapshot, post_snapshot)
+                fs_alerts = check_suspicious_files(added, modified, tool_id)
+                if fs_alerts:
+                    alerts = monitor.stop()
+                    self._print_fs_alerts(fs_alerts)
+                    print(f"\n[fenceline] Sandbox: BLOCKED — suspicious filesystem changes.")
+                    self._kill_container()
+                    return alerts, 1
 
         # --- Stage 2: Import test ---
         # After install looks clean, try importing the package inside the
@@ -491,6 +508,13 @@ class SandboxedInstall:
                 f"{alert.connection.remote_ip}:{alert.connection.remote_port} "
                 f"— {alert.reason}"
             )
+
+    def _print_fs_alerts(self, fs_alerts: List[FsAlert]) -> None:
+        """Print filesystem diff alerts."""
+        print(f"\n[fenceline] Sandbox: {len(fs_alerts)} suspicious filesystem change(s)!")
+        for alert in fs_alerts:
+            icon = "!!" if alert.severity == "critical" else "?"
+            print(f"  {icon} [{alert.severity.upper()}] {alert.path} — {alert.reason}")
 
     def _copy_artifacts(self, container_path: str, host_dir: Path) -> bool:
         """Copy install artifacts from container to host.
