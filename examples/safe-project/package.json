@@ -1,0 +1,13 @@
+{
+  "name": "fenceline-test-project",
+  "version": "1.0.0",
+  "description": "Safe test project for verifying Fenceline sandbox works correctly",
+  "private": true,
+  "dependencies": {
+    "is-odd": "^3.0.1",
+    "is-even": "^1.0.0"
+  },
+  "scripts": {
+    "test": "node -e \"console.log('is-odd(3):', require('is-odd')(3)); console.log('is-even(4):', require('is-even')(4));\""
+  }
+}

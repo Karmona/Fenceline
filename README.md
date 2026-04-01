@@ -7,7 +7,7 @@
 
 **A dependency firewall for developer machines.**
 
-Detonates package installs in a Docker sandbox and only promotes artifacts to your host if the network behavior is clean. Untrusted code never runs on your machine.
+Detonates package installs in a Docker sandbox, monitors network connections, DNS queries, HTTP behavior, and filesystem changes, then only promotes artifacts to your host if everything is clean. Untrusted code never runs on your machine.
 
 ## Quick Start
 
@@ -20,9 +20,12 @@ npm install express     # automatically sandboxed via Docker
 
 # Or run a one-off sandboxed install
 fenceline install --sandbox npm install express
+
+# Try the example project
+cd examples/safe-project && ./test.sh
 ```
 
-Requires Docker. After `wrap --enable`, all npm/yarn/pnpm install commands automatically route through the sandbox. Non-install commands (`npm test`, `npm run`, etc.) pass through unchanged.
+Requires Docker. After `wrap --enable`, all npm/yarn/pnpm/pip install commands automatically route through the sandbox. Non-install commands (`npm test`, `npm run`, etc.) pass through unchanged.
 
 ```bash
 fenceline wrap --status    # see what's wrapped
@@ -48,35 +51,42 @@ See [exploits/](exploits/) for 11 detailed case studies with IOCs and timelines.
 ```
 fenceline install --sandbox npm install <pkg>
 
-┌──────────────────────────────────────────┐
-│ Docker Container (disposable)            │
-│                                          │
-│ Stage 1: npm install <pkg>               │
-│   → monitor all outbound connections     │
-│                                          │
-│ Stage 2: node -e "require('<pkg>')"      │
-│   → catch import-time payloads           │
-│                                          │
-│ Suspicious? → KILL. Nothing installed.   │
-│ Clean? → Copy node_modules to host.      │
-└──────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ Docker Container (--cap-add=NET_ADMIN)       │
+│                                              │
+│ iptables LOG: capture every TCP SYN + DNS    │
+│                                              │
+│ Stage 1: npm install <pkg>                   │
+│   → real-time netstat polling (0.5s)         │
+│   → iptables post-hoc sweep (zero-miss)      │
+│   → expected-process check (curl? BLOCKED)   │
+│                                              │
+│ Filesystem diff: detect dropped binaries     │
+│                                              │
+│ Stage 2: node -e "require('<pkg>')"          │
+│   → catch import-time payloads               │
+│                                              │
+│ DNS check: unusual resolver activity?        │
+│                                              │
+│ Suspicious? → KILL. Nothing installed.       │
+│ Clean? → Copy node_modules to host.          │
+└──────────────────────────────────────────────┘
 ```
 
-**Malicious package blocked:**
-```
-[fenceline] Sandbox: 1 suspicious connection(s) in Stage 1 (install)!
-  !! [CRITICAL] node -> 93.184.216.34:8080 — Non-standard port 8080
-[fenceline] Sandbox: BLOCKED — not installing on your machine.
-```
+### Detection layers
 
-**Clean package verified:**
-```
-[fenceline] Sandbox: Stage 2 — testing import of 'is-odd'...
-[fenceline] Sandbox: install clean. Copying artifacts to host...
-[fenceline] Sandbox: done. Install verified and applied.
-```
-
-Both outputs above are from real Docker tests, not mockups.
+| Layer | What it catches | How |
+|-------|----------------|-----|
+| **Network monitoring** | C2 beacons, exfiltration to unknown servers | iptables LOG (every TCP SYN) + netstat polling |
+| **Port enforcement** | Connections to non-443 ports | Any port != 443 -> CRITICAL |
+| **CDN fingerprinting** | Connections to unexpected CDNs | IP checked against deep map CIDR ranges |
+| **Process heuristic** | curl/wget/bash spawned by install scripts | Expected processes per tool (node/npm for npm installs) |
+| **Filesystem diffing** | Dropped binaries, files in /etc, /root, /home | Pre/post snapshot comparison |
+| **Import monitoring** | Lazy payloads that activate on require()/import | Stage 2 runs require() inside container |
+| **DNS monitoring** | DNS tunneling, unusual resolver activity | iptables LOG on UDP port 53 |
+| **HTTP behavior** | POST/PUT to unexpected domains | Logging proxy captures CONNECT targets and HTTP methods |
+| **Metadata scoring** | New packages, maintainer changes, missing provenance | Lockfile diff + registry lookup + risk scoring |
+| **Capability escalation** | postinstall/preinstall added between versions | Version-to-version capability comparison |
 
 ## Why Fenceline?
 
@@ -102,41 +112,55 @@ Theoretical assessments -- not proven in-the-wild. See [exploits/](exploits/) fo
 | Axios RAT | 2026 | **Would block** -- C2 on port 8000 |
 | TeamPCP: LiteLLM | 2026 | **Would block** -- Stage 2 catches .pth payload |
 | chalk/debug | 2025 | **Would block** -- Stage 2 catches import C2 |
-| Nx/s1ngularity | 2025 | Partial -- exfils via legitimate domain |
+| Nx/s1ngularity | 2025 | **Would block** -- HTTP proxy detects POST to unexpected domain |
 | Ultralytics | 2024 | **Would block** -- mining pool on port 8080 |
-| ua-parser-js | 2021 | **Would block** -- postinstall phones home |
+| ua-parser-js | 2021 | **Would block** -- postinstall phones home + unexpected process (curl) |
 | event-stream | 2018 | **Would block** -- Stage 2 catches import payload |
 | colors.js | 2022 | **Contained** -- no network, but isolated in container |
 | XZ Utils | 2024 | **Contained** -- passive backdoor, isolated |
 | Codecov | 2021 | Outside scope -- CI/CD tool |
 | Polyfill.io | 2024 | Outside scope -- client-side CDN |
 
-7 blocked. 2 contained. 2 outside scope.
+8 blocked. 2 contained. 1 outside scope.
 
 ## What This Does NOT Catch
 
 - Attacks with no network activity (logic bombs, sabotage)
 - CI/CD pipeline attacks (use `fenceline audit-actions` for Actions)
 - Code that only activates after being copied to host without network
-- Exfiltration via legitimate domains without HTTP analysis (future work)
 - Steganographic payloads (.WAV files, etc.)
+- Browser-side attacks (crypto hijacking in bundled JavaScript)
 
 ## Ecosystem Support
 
-Fenceline is optimized for **install-time and import-time network behavior on developer machines**. It is not a general-purpose package malware detector.
+| Ecosystem | Sandbox | Artifact copy | Wrapping | Status |
+|-----------|---------|---------------|----------|--------|
+| **Node.js** (npm, yarn, pnpm) | Full | Full | Full | Production |
+| **Python** (pip) | Full | Full | Full | Supported |
+| **Rust** (cargo) | Monitoring only | No | No | Experimental |
+| **Ruby** (gem) | Monitoring only | No | No | Experimental |
 
-- **Node.js** (npm, yarn, pnpm): Fully supported -- sandbox + artifact copy
-- **Python** (pip): Experimental -- sandbox monitoring works, artifact copy is limited
-- **Others**: Network monitoring works, but no artifact handling yet
-
-## Additional Commands
+## Commands
 
 | Command | What it does |
 |---------|-------------|
-| `fenceline check` | Scan lockfile diffs for risky changes -- package age, maintainer changes, missing provenance. npm + PyPI (experimental). |
-| `fenceline audit-actions` | Scan GitHub Actions for unpinned tags. The TeamPCP attack force-pushed Trivy's tags. |
-| `fenceline init` | Git hooks that auto-run `fenceline check` on lockfile changes. |
-| `tools/quick-check.sh` | One-command security posture report. No install needed. |
+| `fenceline wrap --enable` | Activate the dependency firewall for npm/yarn/pnpm/pip |
+| `fenceline install --sandbox <cmd>` | One-off sandboxed install with full monitoring |
+| `fenceline install --sandbox --format json <cmd>` | JSON output for CI integration |
+| `fenceline check` | Scan lockfile diffs for risky changes (cached registry lookups) |
+| `fenceline map --check` | Validate deep map data against live DNS |
+| `fenceline map --update` | Refresh DNS snapshots in map YAML files |
+| `fenceline audit-actions` | Scan GitHub Actions for unpinned tags |
+| `fenceline init` | Git hooks that auto-run `fenceline check` on lockfile changes |
+
+## Example Project
+
+The [examples/safe-project/](examples/safe-project/) directory contains a minimal Node.js project with safe dependencies for testing Fenceline locally:
+
+```bash
+cd examples/safe-project
+./test.sh   # runs sandboxed install + check + JSON output verification
+```
 
 ## Learn More
 
@@ -151,10 +175,10 @@ Fenceline is optimized for **install-time and import-time network behavior on de
 
 | Phase | Status | What |
 |-------|--------|------|
-| Core Engine | Done | Docker sandbox, 2-stage monitoring, filesystem diffing, fail-closed wrapper |
-| Detection | Done | Infrastructure fingerprinting (deep map), CDN matching, process tree tracking |
-| CLI Tools | Done | wrap (npm + pip), install (--format json), check, audit-actions, map, init. 289 tests. |
-| Ecosystem | Done | Node.js fully supported, Python pip with artifact promotion and wrapping |
+| Core Engine | Done | Docker sandbox, 2-stage monitoring, filesystem diffing, iptables LOG capture |
+| Detection | Done | CDN fingerprinting, expected-process heuristic, DNS monitoring, HTTP proxy analysis |
+| CLI Tools | Done | wrap (npm + pip), install (--format json), check (cached), map, audit-actions, init. 289 tests. |
+| Ecosystem | Done | Node.js production-ready, Python pip supported, others experimental |
 | Knowledge Base | Done | 11 exploit case studies, defense playbook, tool landscape |
 | Next | Planned | CI enforcement mode, deeper HTTP payload analysis, eBPF tracing |
 

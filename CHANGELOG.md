@@ -5,10 +5,23 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- Filesystem diffing in sandbox — detects dropped binaries, executables in unexpected locations, files in sensitive directories. Runs between Stage 1 (network) and Stage 2 (import).
-- Python artifact promotion — pip installs now copy newly installed packages from sandbox to host using pre/post package list diff.
+- **iptables LOG monitoring** — captures every outbound TCP SYN and DNS query inside the container with zero race condition. Eliminates the 500ms polling gap.
+- **Expected-process heuristic** — detects curl, wget, bash etc. making network connections during installs. Maps expected processes per tool via deep map YAML.
+- **DNS query monitoring** — captures outbound UDP port 53 via iptables LOG. Detects DNS tunneling and unusual resolver activity.
+- **HTTP behavior analysis** — logging proxy captures CONNECT targets and HTTP methods. Detects POST/PUT to unexpected domains (catches Nx/s1ngularity-style exfiltration).
+- **Registry caching** — 1-hour file cache for npm/PyPI lookups in `~/.cache/fenceline/`. Makes repeated `fenceline check` runs fast.
+- **Capability diffing** — detects when postinstall/preinstall scripts are added between package versions. Common attack pattern.
+- **Output formatters** — colored console output (ANSI, respects NO_COLOR) and GitHub markdown tables with emoji status indicators.
+- **pip/pip3 wrapping** — `fenceline wrap --enable` now wraps pip alongside npm/yarn/pnpm.
+- **`fenceline map --check/--update`** — validate and refresh deep map data against live DNS.
+- Filesystem diffing in sandbox — detects dropped binaries, executables in unexpected locations, files in sensitive directories.
+- Python artifact promotion — pip installs copy newly installed packages from sandbox to host.
 - `--format json` flag for `fenceline install` — structured JSON output for CI integration.
-- Competitive positioning section in README ("Why Fenceline?").
+- Structured logging via `fenceline.log` module — all progress messages go to stderr, user-facing output to stdout.
+- Docker integration tests (real end-to-end with containers).
+- CLAUDE.md with instructions for AI coding tools.
+- Example project in `examples/safe-project/` for local testing.
+- 289 tests across 19 test files (up from 83 in v0.5.0).
 
 ### Changed
 - README restructured for adoption: Quick Start first, wrapper-led, Problem section shortened.
