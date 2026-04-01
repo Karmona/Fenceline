@@ -19,13 +19,24 @@ def get_package_info(name: str) -> dict | None:
     """Fetch full package metadata from the npm registry.
 
     Returns the parsed JSON document, or ``None`` on 404 / network error.
+    Uses a 1-hour file cache to avoid redundant network calls.
     """
+    from .cache import get_cached, set_cached
+
+    cache_key = f"npm:{name}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached
+
     url = f"{_REGISTRY}/{urllib.parse.quote(name, safe='@/')}"
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
 
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-            return json.loads(resp.read())
+            data = json.loads(resp.read())
+            if data is not None:
+                set_cached(cache_key, data)
+            return data
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             return None
@@ -93,13 +104,24 @@ def get_pypi_package_info(name: str) -> dict | None:
     """Fetch package metadata from the PyPI JSON API.
 
     Returns the parsed JSON document, or ``None`` on 404 / network error.
+    Uses a 1-hour file cache to avoid redundant network calls.
     """
+    from .cache import get_cached, set_cached
+
+    cache_key = f"pypi:{name}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached
+
     url = f"{_PYPI_REGISTRY}/pypi/{urllib.parse.quote(name, safe='')}/json"
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
 
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-            return json.loads(resp.read())
+            data = json.loads(resp.read())
+            if data is not None:
+                set_cached(cache_key, data)
+            return data
     except urllib.error.HTTPError:
         return None
     except (urllib.error.URLError, OSError, json.JSONDecodeError):

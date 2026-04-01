@@ -65,7 +65,7 @@ fi
 '''
 
 _WRAPPER_DIR = Path.home() / ".fenceline" / "bin"
-_TOOLS = ["npm", "npx", "yarn", "pnpm"]
+_TOOLS = ["npm", "npx", "yarn", "pnpm", "pip", "pip3"]
 
 
 def _find_real_tool(name: str) -> str | None:
@@ -153,8 +153,11 @@ def _enable_wrappers() -> int:
         installed.append(tool)
 
     if not installed:
-        print("[fenceline] No package managers found (npm, npx, yarn, pnpm).", file=sys.stderr)
+        print("[fenceline] No package managers found.", file=sys.stderr)
         return 1
+
+    if "pip" in installed or "pip3" in installed:
+        print("[fenceline] Note: pip/pip3 wrappers are installed. They work best inside a virtualenv.")
 
     print(f"[fenceline] Wrappers installed for: {', '.join(installed)}")
     print(f"[fenceline] Location: {_WRAPPER_DIR}")

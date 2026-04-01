@@ -27,8 +27,17 @@ def _mock_urlopen(data: dict, status: int = 200):
 
 
 class TestGetPackageInfo:
+    @staticmethod
+    def _clear_cache():
+        """Clear registry cache to isolate tests."""
+        from fenceline.check.cache import _CACHE_DIR
+        import shutil
+        if _CACHE_DIR.exists():
+            shutil.rmtree(_CACHE_DIR)
+
     @patch("fenceline.check.registry.urllib.request.urlopen")
     def test_success(self, mock_urlopen):
+        self._clear_cache()
         mock_urlopen.return_value = _mock_urlopen({"name": "express", "versions": {}})
         result = get_package_info("express")
         assert result is not None
@@ -43,6 +52,7 @@ class TestGetPackageInfo:
 
     @patch("fenceline.check.registry.urllib.request.urlopen")
     def test_timeout_returns_none(self, mock_urlopen):
+        self._clear_cache()
         mock_urlopen.side_effect = urllib.error.URLError("timeout")
         assert get_package_info("express") is None
 

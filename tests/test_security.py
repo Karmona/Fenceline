@@ -259,6 +259,10 @@ class TestURLEscapingSecurity:
 
     @patch("fenceline.check.registry.urllib.request.urlopen")
     def test_scoped_package_preserved(self, mock_urlopen):
+        from fenceline.check.cache import _CACHE_DIR
+        import shutil
+        if _CACHE_DIR.exists():
+            shutil.rmtree(_CACHE_DIR)
         from fenceline.check.registry import get_package_info
         mock_resp = MagicMock()
         mock_resp.read.return_value = b'{"name": "@types/node"}'
