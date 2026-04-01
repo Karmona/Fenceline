@@ -75,16 +75,13 @@ def check_pypi_provenance(name: str, version: str) -> dict:
             "attestation_count": 0,
         }
 
-    # PyPI attestations are in the "urls" array (file-level), each with
-    # an optional "digests" and "has_sig" field.
+    # Check for PEP 740 provenance attestations in the "urls" array.
+    # Note: has_sig is deprecated by PyPI and always returns false.
+    # We rely solely on PEP 740 attestations (provenance/attestations fields).
     urls = data.get("urls", [])
     if not isinstance(urls, list):
         urls = []
 
-    has_sig = any(u.get("has_sig", False) for u in urls)
-
-    # Check for PEP 740 provenance attestations
-    # These appear as "provenance" field on individual file objects
     attestation_count = sum(
         1 for u in urls
         if u.get("provenance") or u.get("attestations")
@@ -92,6 +89,6 @@ def check_pypi_provenance(name: str, version: str) -> dict:
 
     return {
         "has_provenance": attestation_count > 0,
-        "has_signatures": has_sig,
+        "has_signatures": False,  # has_sig deprecated by PyPI, always false
         "attestation_count": attestation_count,
     }

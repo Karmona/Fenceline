@@ -117,6 +117,24 @@ def compute_risk(
             "detail": "Package declares a preinstall script",
         })
 
+    # --- PyPI-specific capabilities ---
+    if "has_setup_py_only" in capabilities:
+        pts = 15
+        score += pts
+        signals.append({
+            "signal": "has_setup_py_only",
+            "points": pts,
+            "detail": "sdist-only package — setup.py executes arbitrary code during install",
+        })
+    if "has_native_extension" in capabilities:
+        pts = 10
+        score += pts
+        signals.append({
+            "signal": "has_native_extension",
+            "points": pts,
+            "detail": "Package compiles native C/C++ extensions during install",
+        })
+
     # --- Provenance ---
     if not provenance.get("has_provenance"):
         pts = 10

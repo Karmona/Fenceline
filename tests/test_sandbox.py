@@ -525,3 +525,90 @@ class TestNodeProxySetup:
         shell_cmd = docker_run_cmd[-1]
         assert "fenceline-proxy.py" in shell_cmd, "pip should use Python proxy"
         assert "fenceline-proxy.js" not in shell_cmd, "pip should NOT use Node proxy"
+
+
+# --- Dry-run mode ---
+
+
+class TestDryRun:
+    """Verify that --dry-run skips artifact copy."""
+
+    def _make_deep_map(self):
+        import ipaddress
+        from fenceline.deepmap.models import AllowedDomain, CDNMap, DeepMap, ToolMap
+        cdn = CDNMap(
+            id="cloudflare", name="Cloudflare", asn="AS13335",
+            ipv4_prefixes=[ipaddress.IPv4Network("104.16.0.0/16")],
+            ipv6_prefixes=[],
+        )
+        tool = ToolMap(
+            id="npm", description="npm",
+            primary_domains=[AllowedDomain(domain="registry.npmjs.org", cdn_provider="cloudflare")],
+        )
+        return DeepMap(tools=[tool], cdns=[cdn])
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_dry_run_skips_artifact_copy(self, mock_run, _mock_docker, capsys):
+        """dry_run=True should not call docker cp."""
+        docker_cp_called = False
+
+        def side_effect(*args, **kwargs):
+            nonlocal docker_cp_called
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock(returncode=0, stderr="")
+            if cmd[0:2] == ["docker", "run"]:
+                result.stdout = "dryrun123\n"
+            elif cmd[0:2] == ["docker", "exec"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "cp"]:
+                docker_cp_called = True
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "kill"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "rm"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        mock_run.side_effect = side_effect
+
+        sandbox = SandboxedInstall(self._make_deep_map(), dry_run=True)
+        alerts, exit_code = sandbox.run(["npm", "install", "is-odd"])
+
+        assert not docker_cp_called, "dry_run should skip docker cp"
+        captured = capsys.readouterr()
+        assert "dry-run" in captured.out.lower() or "dry-run" in captured.err.lower()
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_non_dry_run_copies_artifacts(self, mock_run, _mock_docker):
+        """Default (dry_run=False) should call docker cp for clean installs."""
+        docker_cp_called = False
+
+        def side_effect(*args, **kwargs):
+            nonlocal docker_cp_called
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock(returncode=0, stderr="")
+            if cmd[0:2] == ["docker", "run"]:
+                result.stdout = "normal123\n"
+            elif cmd[0:2] == ["docker", "exec"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "cp"]:
+                docker_cp_called = True
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "kill"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "rm"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        mock_run.side_effect = side_effect
+
+        sandbox = SandboxedInstall(self._make_deep_map(), dry_run=False)
+        sandbox.run(["npm", "install", "is-odd"])
+
+        assert docker_cp_called, "non-dry-run should call docker cp"

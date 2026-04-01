@@ -474,11 +474,12 @@ class SandboxedInstall:
     """
 
     def __init__(self, deep_map: DeepMap, timeout: int = 300,
-                 monitor_seconds: int = 60) -> None:
+                 monitor_seconds: int = 60, dry_run: bool = False) -> None:
         self._deep_map = deep_map
         self._timeout = timeout
         self._monitor_seconds = monitor_seconds
         self._container_id: Optional[str] = None
+        self._dry_run = dry_run
 
     def run(self, cmd: list[str]) -> Tuple[List[Alert], int]:
         """Run the install command in a sandboxed container.
@@ -658,11 +659,18 @@ class SandboxedInstall:
                         capture_output=True, timeout=30,
                     )
                 elif tool_id in ("pip", "pip3"):
-                    subprocess.run(
-                        [_docker(), "exec", self._container_id,
-                         "python3", "-c", f"import {pkg_name}"],
-                        capture_output=True, timeout=30,
-                    )
+                    # Distribution names often differ from import names:
+                    # e.g., google-auth → google.auth, Pillow → PIL
+                    # Common case: hyphens become underscores in Python imports.
+                    # Try the top_level.txt from metadata first, fall back to
+                    # hyphen→underscore, then original name.
+                    import_name = self._resolve_pip_import_name(pkg_name)
+                    if import_name:
+                        subprocess.run(
+                            [_docker(), "exec", self._container_id,
+                             "python3", "-c", f"import {import_name}"],
+                            capture_output=True, timeout=30,
+                        )
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass
 
@@ -703,7 +711,13 @@ class SandboxedInstall:
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass
 
-        # Clean install — copy artifacts to host
+        # Clean install — copy artifacts to host (unless dry-run)
+        if self._dry_run:
+            logger.info("Sandbox: install clean. Dry-run mode — skipping artifact copy.")
+            self._kill_container()
+            print(f"[fenceline] Sandbox: done. Install verified clean (dry-run, no artifacts copied).")
+            return alerts, exit_code
+
         logger.info("Sandbox: install clean. Copying artifacts to host...")
         copy_ok = True
         if is_pip:
@@ -827,7 +841,9 @@ class SandboxedInstall:
                 logger.warning(f"Could not find package directory for {pkg_original}")
 
         # Copy console scripts (entry points like 'black', 'flask', etc.)
-        self._copy_pip_console_scripts(new_packages)
+        scripts_ok = self._copy_pip_console_scripts(new_packages)
+        if not scripts_ok:
+            logger.warning("Some console scripts failed to copy (install still succeeded)")
 
         return all_ok
 
@@ -855,15 +871,18 @@ class SandboxedInstall:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass  # dist-info copy is best-effort
 
-    def _copy_pip_console_scripts(self, new_packages: dict) -> None:
+    def _copy_pip_console_scripts(self, new_packages: dict) -> bool:
         """Copy console scripts (entry points) for newly installed pip packages.
 
         Finds scripts in the container's bin/ directory that were installed
         by new packages. Copies them to the host's scripts directory.
+
+        Returns True if all scripts copied successfully (or no scripts to copy),
+        False if any copy or chmod failed.
         """
         host_bin = _host_pip_bin_dir()
         if host_bin is None:
-            return  # No bin dir found — skip silently
+            return True  # No bin dir found — nothing to copy
 
         # Find the container's bin directory
         try:
@@ -874,10 +893,11 @@ class SandboxedInstall:
             )
             container_bin = bin_result.stdout.strip() if bin_result.returncode == 0 else ""
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            return
+            logger.warning("Could not determine container bin directory")
+            return False
 
         if not container_bin:
-            return
+            return True
 
         # Get list of scripts in container's bin/ dir
         try:
@@ -887,10 +907,11 @@ class SandboxedInstall:
                 capture_output=True, text=True, timeout=10,
             )
             if ls_result.returncode != 0:
-                return
+                return True
             container_scripts = set(ls_result.stdout.strip().splitlines())
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            return
+            logger.warning("Could not list container scripts")
+            return False
 
         # Filter to scripts that are likely from new packages
         # (skip python3, pip, etc. which are always present)
@@ -899,9 +920,10 @@ class SandboxedInstall:
         new_scripts = container_scripts - system_scripts
 
         if not new_scripts:
-            return
+            return True
 
         copied = 0
+        failed = 0
         for script in new_scripts:
             script_path = f"{container_bin}/{script}"
             try:
@@ -917,14 +939,69 @@ class SandboxedInstall:
                         capture_output=True, timeout=10,
                     )
                     if cp_result.returncode == 0:
-                        # Make executable
-                        (host_bin / script).chmod(0o755)
-                        copied += 1
-            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                pass
+                        try:
+                            (host_bin / script).chmod(0o755)
+                            copied += 1
+                        except OSError as e:
+                            logger.warning(f"Failed to chmod console script '{script}': {e}")
+                            failed += 1
+                    else:
+                        logger.warning(
+                            f"Failed to copy console script '{script}' "
+                            f"(docker cp exit {cp_result.returncode})"
+                        )
+                        failed += 1
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Timeout copying console script '{script}'")
+                failed += 1
+            except (FileNotFoundError, OSError) as e:
+                logger.warning(f"Error copying console script '{script}': {e}")
+                failed += 1
 
         if copied:
             logger.info(f"Copied {copied} console script(s) to {host_bin}")
+        return failed == 0
+
+    def _resolve_pip_import_name(self, dist_name: str) -> Optional[str]:
+        """Resolve a PyPI distribution name to its Python import name.
+
+        Distribution names often differ from import names:
+        - google-auth → google.auth
+        - Pillow → PIL
+        - python-dateutil → dateutil
+
+        Strategy:
+        1. Try top_level.txt from the installed .dist-info metadata
+        2. Fall back to hyphen→underscore conversion
+        3. Validate the result is a valid Python identifier
+        """
+        if not self._container_id:
+            return None
+
+        # Try reading top_level.txt from .dist-info
+        normalized = dist_name.replace("-", "_").lower()
+        try:
+            result = subprocess.run(
+                [_docker(), "exec", self._container_id,
+                 "sh", "-c",
+                 f"cat /usr/local/lib/python*/site-packages/{normalized}-*.dist-info/top_level.txt 2>/dev/null"
+                 f" || cat /usr/local/lib/python*/site-packages/{dist_name}-*.dist-info/top_level.txt 2>/dev/null"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                # top_level.txt may list multiple modules; use the first one
+                import_name = result.stdout.strip().splitlines()[0].strip()
+                if import_name and import_name.isidentifier():
+                    return import_name
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        # Fallback: hyphens → underscores (most common case)
+        fallback = dist_name.replace("-", "_")
+        if fallback.isidentifier():
+            return fallback
+
+        return None
 
     def _copy_artifacts(self, container_path: str, host_dir: Path) -> bool:
         """Copy install artifacts from container to host.

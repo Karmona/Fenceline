@@ -43,15 +43,16 @@ def run(args) -> int:
 
     monitor_time = getattr(args, 'monitor_time', 60)
     output_format = getattr(args, 'output_format', 'text')
+    dry_run = getattr(args, 'dry_run', False)
 
     if sandbox:
-        return _run_sandboxed(cmd, monitor_time, output_format)
+        return _run_sandboxed(cmd, monitor_time, output_format, dry_run=dry_run)
     else:
         return _run_host(cmd)
 
 
 def _run_sandboxed(cmd: list[str], monitor_time: int = 60,
-                   output_format: str = "text") -> int:
+                   output_format: str = "text", dry_run: bool = False) -> int:
     """Run install in a Docker container (preventive — blocks if suspicious)."""
     import json
     import io
@@ -73,7 +74,7 @@ def _run_sandboxed(cmd: list[str], monitor_time: int = 60,
         return 1
 
     deep_map = load_maps()
-    sandbox = SandboxedInstall(deep_map, monitor_seconds=monitor_time)
+    sandbox = SandboxedInstall(deep_map, monitor_seconds=monitor_time, dry_run=dry_run)
 
     if output_format == "json":
         # Suppress text output, capture it

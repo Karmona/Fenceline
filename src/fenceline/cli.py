@@ -102,6 +102,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format (default: text). JSON is useful for CI integration.",
     )
     install_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run all detection layers but skip artifact copy to host. "
+             "Useful for validation and testing.",
+    )
+    install_parser.add_argument(
         "install_cmd",
         nargs=argparse.REMAINDER,
         help="Command to run (e.g., npm install express)",

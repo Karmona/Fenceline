@@ -121,3 +121,48 @@ def test_level_boundaries():
     )
     # no_provenance=10, no new_package since updated -> 10 = LOW
     assert r2.level == "LOW"
+
+
+def test_setup_py_only_adds_points():
+    """PyPI packages that are sdist-only (setup.py execution) should add 15 pts."""
+    change = _make_change(change_type="updated", old_version="1.0.0", new_version="2.0.0")
+    age = timedelta(days=60)
+    maintainer = {"changed": False, "added": [], "removed": []}
+    provenance = {"has_provenance": True, "has_signatures": True, "attestation_count": 1}
+    capabilities = ["has_setup_py_only"]
+
+    report = compute_risk(change, age, maintainer, provenance, capabilities)
+
+    assert report.score == 15
+    signal_names = {s["signal"] for s in report.signals}
+    assert "has_setup_py_only" in signal_names
+
+
+def test_native_extension_adds_points():
+    """PyPI packages with native C extensions should add 10 pts."""
+    change = _make_change(change_type="updated", old_version="1.0.0", new_version="2.0.0")
+    age = timedelta(days=60)
+    maintainer = {"changed": False, "added": [], "removed": []}
+    provenance = {"has_provenance": True, "has_signatures": True, "attestation_count": 1}
+    capabilities = ["has_native_extension"]
+
+    report = compute_risk(change, age, maintainer, provenance, capabilities)
+
+    assert report.score == 10
+    signal_names = {s["signal"] for s in report.signals}
+    assert "has_native_extension" in signal_names
+
+
+def test_pypi_capabilities_combined():
+    """Both PyPI capabilities together should accumulate."""
+    change = _make_change(change_type="added")
+    age = timedelta(days=60)
+    maintainer = {"changed": False, "added": [], "removed": []}
+    provenance = {"has_provenance": False, "has_signatures": False, "attestation_count": 0}
+    capabilities = ["has_setup_py_only", "has_native_extension"]
+
+    report = compute_risk(change, age, maintainer, provenance, capabilities)
+
+    # has_setup_py_only=15 + has_native_extension=10 + no_provenance=10 + new_package=5 = 40
+    assert report.score == 40
+    assert report.level == "HIGH"

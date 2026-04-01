@@ -28,7 +28,7 @@ All notable changes to this project will be documented in this file.
 - CLAUDE.md with instructions for AI coding tools.
 - Example project in `examples/safe-project/` for local testing.
 - Package validation script (`tools/validate-packages.sh`) — tests 10 npm + 10 pip packages through sandbox.
-- 336 tests across 19 test files (up from 83 in v0.5.0).
+- 341 tests across 19 test files (up from 83 in v0.5.0).
 
 ### Changed
 - README restructured for adoption: Quick Start first, wrapper-led, Problem section shortened.

@@ -111,12 +111,13 @@ class TestCheckPyPIProvenance:
         return mock_resp
 
     @patch("fenceline.check.provenance.urllib.request.urlopen")
-    def test_has_sig(self, mock_urlopen):
+    def test_has_sig_deprecated(self, mock_urlopen):
+        """has_sig is deprecated by PyPI and always false — we ignore it."""
         mock_urlopen.return_value = self._mock_urlopen({
             "urls": [{"filename": "pkg-1.0.tar.gz", "has_sig": True}],
         })
         result = check_pypi_provenance("pkg", "1.0")
-        assert result["has_signatures"] is True
+        assert result["has_signatures"] is False  # deprecated field
 
     @patch("fenceline.check.provenance.urllib.request.urlopen")
     def test_no_provenance(self, mock_urlopen):

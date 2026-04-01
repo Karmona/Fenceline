@@ -34,7 +34,16 @@ runs:
         FENCELINE_LOCKFILE: ${{ inputs.lockfile }}
         FENCELINE_FAIL_ON: ${{ inputs.fail-on }}
       run: |
-        ARGS="check --base-ref ${{ github.event.pull_request.base.sha }} --format markdown"
+        # Determine base ref: PR base SHA, push's previous commit, or HEAD~1 fallback
+        BASE_REF="${{ github.event.pull_request.base.sha }}"
+        if [ -z "$BASE_REF" ]; then
+          BASE_REF="${{ github.event.before }}"
+        fi
+        if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+          BASE_REF="HEAD~1"
+        fi
+
+        ARGS="check --base-ref $BASE_REF --format markdown"
 
         if [ -n "$FENCELINE_LOCKFILE" ]; then
           ARGS="$ARGS --lockfile $FENCELINE_LOCKFILE"
