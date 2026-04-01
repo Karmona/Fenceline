@@ -115,9 +115,11 @@ def run(args) -> int:
     if fmt == "json":
         _output_json(reports)
     elif fmt == "markdown":
-        _output_markdown(reports)
+        from fenceline.output.github import format_markdown
+        print(format_markdown(reports))
     else:
-        _output_console(reports)
+        from fenceline.output.console import format_console
+        print(format_console(reports))
 
     # --- Exit code ---
     max_level = max((r.score for r in reports), default=0)
@@ -167,17 +169,6 @@ def _parse_head(lockfile_type: str, lockfile_path: Path) -> dict:
     return parse_lockfile(lockfile_path)
 
 
-def _output_console(reports: list[RiskReport]) -> None:
-    for r in reports:
-        icon = {"LOW": ".", "MEDIUM": "~", "HIGH": "!", "CRITICAL": "X"}
-        marker = icon.get(r.level, "?")
-        ver = f"{r.old_version or '(new)'} -> {r.new_version or '(removed)'}"
-        print(f"[{marker}] {r.level:8s} ({r.score:3d}) {r.name}  {ver}")
-        for s in r.signals:
-            print(f"         +{s['points']:2d}  {s['signal']}: {s['detail']}")
-        print()
-
-
 def _output_json(reports: list[RiskReport]) -> None:
     data = []
     for r in reports:
@@ -193,10 +184,3 @@ def _output_json(reports: list[RiskReport]) -> None:
     print(json.dumps(data, indent=2))
 
 
-def _output_markdown(reports: list[RiskReport]) -> None:
-    print("| Package | Change | Score | Level | Signals |")
-    print("|---------|--------|-------|-------|---------|")
-    for r in reports:
-        ver = f"{r.old_version or 'new'} -> {r.new_version or 'removed'}"
-        sigs = ", ".join(s["signal"] for s in r.signals) or "none"
-        print(f"| {r.name} | {ver} | {r.score} | {r.level} | {sigs} |")
