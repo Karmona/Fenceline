@@ -2,6 +2,12 @@
 
 Dependency firewall for developer machines. Sandboxes package installs in Docker, monitors network + filesystem behavior, promotes artifacts only if clean.
 
+## Git commit rules
+
+- NEVER add Co-Authored-By lines to commits
+- NEVER add your name (Claude) as author or co-author
+- All commits should appear as the repo owner's work only
+
 ## Development
 
 ```bash
