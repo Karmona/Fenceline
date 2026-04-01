@@ -22,8 +22,8 @@ from .registry import (
     get_pypi_package_age,
     get_pypi_maintainer_change,
 )
-from .provenance import check_provenance
-from .capabilities import check_capabilities, diff_capabilities
+from .provenance import check_provenance, check_pypi_provenance
+from .capabilities import check_capabilities, check_pypi_capabilities, diff_capabilities
 from .scoring import compute_risk, RiskReport
 
 
@@ -35,8 +35,8 @@ def run(args) -> int:
         - ``base_ref``: git ref to compare against (default ``"HEAD"``)
         - ``format``: output format (``"console"`` | ``"json"`` | ``"markdown"``)
 
-    Returns 0 if all packages are LOW/MEDIUM, 1 if any HIGH/CRITICAL
-    found, and 2 on error.
+    Returns 0 if no packages exceed the --fail-on threshold (default HIGH),
+    1 if any do, and 2 on error.
     """
     explicit = getattr(args, "lockfile", None)
     lockfile_type, lockfile_path = _find_lockfile_typed(explicit)
@@ -85,9 +85,12 @@ def run(args) -> int:
             else:
                 age = get_pypi_package_age(info, version) if version else None
                 maint = get_pypi_maintainer_change(info, change.old_version, version)
-                # Provenance/capabilities not yet supported for PyPI.
-                prov = {"has_provenance": False, "has_signatures": False, "attestation_count": 0}
-                caps = []
+                prov = check_pypi_provenance(pkg_name, version) if version else {
+                    "has_provenance": False,
+                    "has_signatures": False,
+                    "attestation_count": 0,
+                }
+                caps = check_pypi_capabilities(info, version)
         else:
             info = get_package_info(pkg_name)
             if info is None:
@@ -125,8 +128,10 @@ def run(args) -> int:
         print(format_console(reports))
 
     # --- Exit code ---
-    max_level = max((r.score for r in reports), default=0)
-    if max_level > 35:  # HIGH or CRITICAL
+    fail_on = getattr(args, "fail_on", "high") or "high"
+    threshold = {"low": 0, "medium": 15, "high": 35, "critical": 60}.get(fail_on, 35)
+    max_score = max((r.score for r in reports), default=0)
+    if max_score > threshold:
         return 1
     return 0
 

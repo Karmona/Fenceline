@@ -108,6 +108,21 @@ def _host_pip_destination() -> Path:
     return Path.cwd()
 
 
+def _host_pip_bin_dir() -> Optional[Path]:
+    """Find the host's pip-installed scripts directory (e.g., bin/ or Scripts/).
+
+    Returns None if we can't determine it.
+    """
+    import sysconfig
+    try:
+        scripts = sysconfig.get_path('scripts')
+        if scripts and Path(scripts).is_dir():
+            return Path(scripts)
+    except (KeyError, TypeError):
+        pass
+    return None
+
+
 def _validate_container_path(path: str) -> bool:
     """Validate that a container path is safe to copy from.
 
@@ -811,6 +826,9 @@ class SandboxedInstall:
             if not copied_pkg:
                 logger.warning(f"Could not find package directory for {pkg_original}")
 
+        # Copy console scripts (entry points like 'black', 'flask', etc.)
+        self._copy_pip_console_scripts(new_packages)
+
         return all_ok
 
     def _copy_dist_info(self, site_packages: str, pkg_name: str, host_dest: Path) -> None:
@@ -836,6 +854,77 @@ class SandboxedInstall:
                         self._copy_artifacts(dist_dir, host_dest)
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass  # dist-info copy is best-effort
+
+    def _copy_pip_console_scripts(self, new_packages: dict) -> None:
+        """Copy console scripts (entry points) for newly installed pip packages.
+
+        Finds scripts in the container's bin/ directory that were installed
+        by new packages. Copies them to the host's scripts directory.
+        """
+        host_bin = _host_pip_bin_dir()
+        if host_bin is None:
+            return  # No bin dir found — skip silently
+
+        # Find the container's bin directory
+        try:
+            bin_result = subprocess.run(
+                [_docker(), "exec", self._container_id,
+                 "python3", "-c", "import sysconfig; print(sysconfig.get_path('scripts'))"],
+                capture_output=True, text=True, timeout=10,
+            )
+            container_bin = bin_result.stdout.strip() if bin_result.returncode == 0 else ""
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return
+
+        if not container_bin:
+            return
+
+        # Get list of scripts in container's bin/ dir
+        try:
+            ls_result = subprocess.run(
+                [_docker(), "exec", self._container_id,
+                 "sh", "-c", f"ls -1 {container_bin}/ 2>/dev/null"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if ls_result.returncode != 0:
+                return
+            container_scripts = set(ls_result.stdout.strip().splitlines())
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return
+
+        # Filter to scripts that are likely from new packages
+        # (skip python3, pip, etc. which are always present)
+        system_scripts = {"python", "python3", "pip", "pip3", "pip3.12",
+                          "wheel", "easy_install", "activate", "python3.12"}
+        new_scripts = container_scripts - system_scripts
+
+        if not new_scripts:
+            return
+
+        copied = 0
+        for script in new_scripts:
+            script_path = f"{container_bin}/{script}"
+            try:
+                result = subprocess.run(
+                    [_docker(), "exec", self._container_id, "test", "-f", script_path],
+                    capture_output=True, timeout=5,
+                )
+                if result.returncode == 0:
+                    cp_result = subprocess.run(
+                        [_docker(), "cp",
+                         f"{self._container_id}:{script_path}",
+                         str(host_bin / script)],
+                        capture_output=True, timeout=10,
+                    )
+                    if cp_result.returncode == 0:
+                        # Make executable
+                        (host_bin / script).chmod(0o755)
+                        copied += 1
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                pass
+
+        if copied:
+            logger.info(f"Copied {copied} console script(s) to {host_bin}")
 
     def _copy_artifacts(self, container_path: str, host_dir: Path) -> bool:
         """Copy install artifacts from container to host.

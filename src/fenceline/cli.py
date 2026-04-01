@@ -125,6 +125,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format",
     )
     check_parser.add_argument(
+        "--fail-on",
+        choices=["low", "medium", "high", "critical"],
+        default="high",
+        help="Minimum risk level to fail (exit 1). Default: high.",
+    )
+    check_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
     )
     check_parser.set_defaults(func=_cmd_check)

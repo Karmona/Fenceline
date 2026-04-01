@@ -1,4 +1,8 @@
-"""Detect dangerous capabilities declared in package metadata."""
+"""Detect dangerous capabilities declared in package metadata.
+
+Supports both npm (scripts.preinstall/postinstall) and PyPI
+(setup.py detection, native extensions).
+"""
 
 from __future__ import annotations
 
@@ -50,3 +54,42 @@ def diff_capabilities(
         signals.append("capability_escalation_prepare")
 
     return signals
+
+
+def check_pypi_capabilities(info: dict, version: str) -> list[str]:
+    """Return capability signals for a PyPI package version.
+
+    Checks for:
+    - Native extensions (C/C++ code that compiles during install)
+    - setup.py usage (arbitrary code execution during install)
+    """
+    capabilities: list[str] = []
+
+    # Check file list for native extensions / setup.py indicators
+    releases = info.get("releases", {})
+    files = releases.get(version, [])
+    if not isinstance(files, list):
+        files = []
+
+    has_sdist = False
+    has_wheel = False
+    for f in files:
+        filename = f.get("filename", "")
+        if filename.endswith(".tar.gz") or filename.endswith(".zip"):
+            has_sdist = True
+        if filename.endswith(".whl"):
+            has_wheel = True
+
+    # If there's only an sdist (no wheel), setup.py runs during install
+    if has_sdist and not has_wheel:
+        capabilities.append("has_setup_py_only")
+
+    # Check package info for native extension indicators
+    pkg_info = info.get("info", {})
+    classifiers = pkg_info.get("classifiers", [])
+    for c in classifiers:
+        if "C Extension" in c or "Cython" in c:
+            capabilities.append("has_native_extension")
+            break
+
+    return capabilities

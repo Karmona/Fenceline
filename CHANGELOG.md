@@ -14,6 +14,10 @@ All notable changes to this project will be documented in this file.
 - **Registry caching** — 1-hour file cache for npm/PyPI lookups in `~/.cache/fenceline/`. Makes repeated `fenceline check` runs fast.
 - **Capability diffing** — detects when postinstall/preinstall scripts are added between package versions. Common attack pattern.
 - **Output formatters** — colored console output (ANSI, respects NO_COLOR) and GitHub markdown tables with emoji status indicators.
+- **`--fail-on` flag for `fenceline check`** — configurable CI threshold (low/medium/high/critical). Default: high. Also implemented in GitHub Action.
+- **PyPI provenance checking** — queries PyPI JSON API for Sigstore attestations and PGP signatures.
+- **PyPI capability analysis** — detects sdist-only packages (setup.py execution risk) and native extension classifiers.
+- **Pip console script promotion** — newly installed console scripts (e.g., `black`, `flask`) are copied from container bin/ to host.
 - **pip/pip3 wrapping** — `fenceline wrap --enable` now wraps pip alongside npm/yarn/pnpm.
 - **`fenceline map --check/--update`** — validate and refresh deep map data against live DNS.
 - Filesystem diffing in sandbox — detects dropped binaries, executables in unexpected locations, files in sensitive directories.
@@ -24,7 +28,7 @@ All notable changes to this project will be documented in this file.
 - CLAUDE.md with instructions for AI coding tools.
 - Example project in `examples/safe-project/` for local testing.
 - Package validation script (`tools/validate-packages.sh`) — tests 10 npm + 10 pip packages through sandbox.
-- 305 tests across 19 test files (up from 83 in v0.5.0).
+- 319 tests across 19 test files (up from 83 in v0.5.0).
 
 ### Changed
 - README restructured for adoption: Quick Start first, wrapper-led, Problem section shortened.

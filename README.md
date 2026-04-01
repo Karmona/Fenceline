@@ -136,11 +136,11 @@ Theoretical assessments -- not proven in-the-wild. See [exploits/](exploits/) fo
 | Ecosystem | Sandbox | Artifact copy | Wrapping | Status |
 |-----------|---------|---------------|----------|--------|
 | **Node.js** (npm, yarn, pnpm) | Full | Full | Full | Production |
-| **Python** (pip) | Full | Packages only¹ | Full | Supported |
+| **Python** (pip) | Full | Full¹ | Full | Supported |
 | **Rust** (cargo) | Monitoring only | No | No | Experimental |
 | **Ruby** (gem) | Monitoring only | No | No | Experimental |
 
-¹ Copies package directories from site-packages. Console scripts (`bin/`) and `.dist-info` metadata are not yet promoted.
+¹ Copies package directories, `.dist-info` metadata, and console scripts to the host.
 
 ## Commands
 
@@ -150,6 +150,7 @@ Theoretical assessments -- not proven in-the-wild. See [exploits/](exploits/) fo
 | `fenceline install --sandbox <cmd>` | One-off sandboxed install with full monitoring |
 | `fenceline install --sandbox --format json <cmd>` | JSON output for CI integration |
 | `fenceline check` | Scan lockfile diffs for risky changes (cached registry lookups) |
+| `fenceline check --fail-on medium` | Fail CI if any package is MEDIUM risk or higher |
 | `fenceline map --check` | Validate deep map data against live DNS |
 | `fenceline map --update` | Refresh DNS snapshots in map YAML files |
 | `fenceline audit-actions` | Scan GitHub Actions for unpinned tags |
@@ -179,7 +180,7 @@ cd examples/safe-project
 |-------|--------|------|
 | Core Engine | Done | Docker sandbox, 2-stage monitoring, filesystem diffing, iptables LOG capture |
 | Detection | Done | CDN fingerprinting, expected-process heuristic, DNS monitoring, HTTP proxy analysis |
-| CLI Tools | Done | wrap (npm + pip), install (--format json), check (cached), map, audit-actions, init. 305 tests. |
+| CLI Tools | Done | wrap (npm + pip), install (--format json), check (cached), map, audit-actions, init. 319 tests. |
 | Ecosystem | Done | Node.js production-ready, Python pip supported, others experimental |
 | Knowledge Base | Done | 11 exploit case studies, defense playbook, tool landscape |
 | Next | Planned | CI enforcement mode, deeper HTTP payload analysis, eBPF tracing |

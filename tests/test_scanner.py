@@ -13,7 +13,10 @@ from fenceline.check.scanner import run
 
 def _make_args(**kwargs):
     """Create a mock args namespace."""
-    defaults = {"lockfile": None, "base_ref": "HEAD", "format": "text", "verbose": False}
+    defaults = {
+        "lockfile": None, "base_ref": "HEAD", "format": "text",
+        "verbose": False, "fail_on": "high",
+    }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
 
@@ -110,6 +113,68 @@ class TestScannerWithChanges:
         captured = capsys.readouterr()
         assert "| Package |" in captured.out
         assert "evil-pkg" in captured.out
+
+
+class TestScannerFailOn:
+    """Test --fail-on threshold behavior."""
+
+    @patch("fenceline.check.scanner.get_base_lockfile", return_value={})
+    @patch("fenceline.check.scanner.get_package_info", return_value={
+        "name": "pkg", "versions": {"1.0.0": {}},
+        "time": {"1.0.0": "2026-03-20T00:00:00Z"},  # ~12 days old → MEDIUM
+    })
+    @patch("fenceline.check.scanner.get_package_age",
+           return_value=timedelta(days=12))
+    @patch("fenceline.check.scanner.get_maintainer_change", return_value={
+        "changed": False, "added": [], "removed": [],
+    })
+    @patch("fenceline.check.scanner.check_provenance", return_value={
+        "has_provenance": False, "has_signatures": False, "attestation_count": 0,
+    })
+    @patch("fenceline.check.scanner.check_capabilities", return_value=[])
+    def test_fail_on_high_allows_medium(self, *mocks):
+        """MEDIUM risk should pass when fail-on is 'high' (default)."""
+        tmp_path = mocks[0]  # last positional arg
+        # Actually we need tmp_path from fixture — use a different approach
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            lockfile = Path(td) / "package-lock.json"
+            lockfile.write_text(json.dumps({
+                "lockfileVersion": 2,
+                "packages": {
+                    "node_modules/pkg": {"version": "1.0.0", "resolved": "https://..."},
+                },
+            }))
+            result = run(_make_args(lockfile=str(lockfile), fail_on="high"))
+            assert result == 0  # MEDIUM < HIGH threshold
+
+    @patch("fenceline.check.scanner.get_base_lockfile", return_value={})
+    @patch("fenceline.check.scanner.get_package_info", return_value={
+        "name": "pkg", "versions": {"1.0.0": {}},
+        "time": {"1.0.0": "2026-03-20T00:00:00Z"},
+    })
+    @patch("fenceline.check.scanner.get_package_age",
+           return_value=timedelta(days=12))
+    @patch("fenceline.check.scanner.get_maintainer_change", return_value={
+        "changed": False, "added": [], "removed": [],
+    })
+    @patch("fenceline.check.scanner.check_provenance", return_value={
+        "has_provenance": False, "has_signatures": False, "attestation_count": 0,
+    })
+    @patch("fenceline.check.scanner.check_capabilities", return_value=[])
+    def test_fail_on_medium_catches_medium(self, *mocks):
+        """MEDIUM risk should fail when fail-on is 'medium'."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            lockfile = Path(td) / "package-lock.json"
+            lockfile.write_text(json.dumps({
+                "lockfileVersion": 2,
+                "packages": {
+                    "node_modules/pkg": {"version": "1.0.0", "resolved": "https://..."},
+                },
+            }))
+            result = run(_make_args(lockfile=str(lockfile), fail_on="medium"))
+            assert result == 1  # MEDIUM >= MEDIUM threshold
 
 
 class TestScannerLowRisk:

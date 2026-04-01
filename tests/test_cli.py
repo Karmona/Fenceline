@@ -53,3 +53,18 @@ class TestArgumentParsing:
         wrap_pos = out.find("wrap")
         install_pos = out.find("install")
         assert wrap_pos < install_pos
+
+    def test_check_fail_on_flag_parsed(self):
+        parser = build_parser()
+        args = parser.parse_args(["check", "--fail-on", "critical"])
+        assert args.fail_on == "critical"
+
+    def test_check_fail_on_defaults_to_high(self):
+        parser = build_parser()
+        args = parser.parse_args(["check"])
+        assert args.fail_on == "high"
+
+    def test_check_fail_on_rejects_invalid(self):
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["check", "--fail-on", "extreme"])

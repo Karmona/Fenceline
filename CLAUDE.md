@@ -163,12 +163,12 @@ ruff check src/ tests/                               # linting (line-length 100)
 - 2-year slow-burn attacks (XZ utils) — no metadata anomaly until activation
 - CI/CD pipeline compromise — happens in GitHub, not on dev machines
 - HTTPS payload inspection requires MITM (not implemented, only CONNECT target logged)
-- Pip artifact copy promotes package dirs + .dist-info but not console scripts (bin/)
+- PyPI provenance checks PEP 740 attestations and PGP signatures (less mature than npm's Sigstore)
+- Pip artifact copy promotes package dirs + .dist-info + console scripts (bin/)
 
 ## What's next (future work)
 
 - CI enforcement mode (fail PR checks based on sandbox results)
-- Pip console script promotion (bin/ directory)
 - eBPF tracing for deeper syscall visibility
 - HTTPS payload inspection via container CA injection
 - Go/Rust/Ruby artifact promotion
