@@ -461,6 +461,35 @@ class SandboxedInstall:
             )
         return ""
 
+    def _copy_package_manifest(self, cmd: list[str], is_node: bool) -> None:
+        """Copy package manifest files into the container before running install.
+
+        For bare `npm install` (no specific package names), npm reads from
+        package.json in the working directory. Without copying it into the
+        container, npm has nothing to install and node_modules never gets created.
+        """
+        if not is_node:
+            return
+
+        # Only needed for bare installs — if specific packages are named, skip
+        args_after_verb = [a for a in cmd[1:] if a not in ('install', 'add', 'i', 'ci') and not a.startswith('-')]
+        if args_after_verb:
+            return  # specific package names given, no manifest needed
+
+        cwd = Path.cwd()
+        for filename in ('package.json', 'package-lock.json', 'npm-shrinkwrap.json'):
+            host_path = cwd / filename
+            if host_path.exists():
+                result = subprocess.run(
+                    [_docker(), 'cp', str(host_path), f"{self._container_id}:/app/{filename}"],
+                    capture_output=True,
+                    timeout=10,
+                )
+                if result.returncode == 0:
+                    logger.info(f"Sandbox: copied {filename} into container")
+                else:
+                    logger.warning(f"Sandbox: failed to copy {filename}: {result.stderr.decode().strip()}")
+
     def _exec_install(self, cmd: list[str], is_pip: bool, is_node: bool) -> int:
         """Run the install command inside the container via docker exec.
 
@@ -468,6 +497,9 @@ class SandboxedInstall:
         """
         logger.info(f"Sandbox: running {' '.join(cmd)} inside container...")
         logger.info(f"Sandbox: monitoring network for ~{self._monitor_seconds}s...")
+
+        # For bare `npm install`, copy package.json into the container first
+        self._copy_package_manifest(cmd, is_node)
 
         install_cmd_str = ' '.join(shlex.quote(c) for c in cmd)
         proxy_env = ""
