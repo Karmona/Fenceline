@@ -40,17 +40,14 @@ _IMAGES = {
     "gem": "ruby:alpine",
 }
 
-_EXPERIMENTAL_TOOLS = {"pip", "pip3", "cargo", "gem"}
+_EXPERIMENTAL_TOOLS = {"cargo", "gem"}
 
 # Map package manager to the install directory inside the container.
-# Only Node.js has a clean artifact path. Python installs into
-# site-packages which varies by version and virtualenv setup.
 _ARTIFACT_PATHS = {
     "npm": "/app/node_modules",
     "yarn": "/app/node_modules",
     "pnpm": "/app/node_modules",
-    # pip: no artifact copy — install is verified but user must
-    # re-run pip install on host after sandbox passes
+    # pip uses _copy_pip_artifacts() instead — needs before/after diff
 }
 
 
@@ -359,19 +356,28 @@ class SandboxedInstall:
 
         print(f"[fenceline] Sandbox: pulling {image}...")
 
-        # Start container — run the command, then keep alive for monitoring
+        # Start container — run the command, then keep alive for monitoring.
+        # For pip, we also snapshot the pre-install package list so we can
+        # diff it after install to know which packages were added.
+        is_pip = tool_id in ("pip", "pip3")
+        if is_pip:
+            shell_cmd = (
+                "pip list --format=json > /tmp/.fenceline-pre-packages.json 2>/dev/null ; "
+                f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
+                f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
+            )
+        else:
+            shell_cmd = (
+                f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
+                f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
+            )
         try:
             start_result = subprocess.run(
                 [
                     _docker(), "run", "-d",
                     "-w", "/app",
                     image,
-                    "sh", "-c",
-                    # Quote each argument to prevent shell interpretation.
-                    # Capture the install exit code BEFORE sleeping, then
-                    # exit with that code. Without this, a failed install
-                    # returns 0 because sleep is the last command.
-                    f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; sleep {monitor_secs} ; exit $FENCELINE_EXIT",
+                    "sh", "-c", shell_cmd,
                 ],
                 capture_output=True,
                 text=True,
@@ -485,13 +491,19 @@ class SandboxedInstall:
 
         # Clean install — copy artifacts to host
         print(f"[fenceline] Sandbox: install clean. Copying artifacts to host...")
-        artifact_path = _ARTIFACT_PATHS.get(tool_id)
-        if artifact_path:
-            if not self._copy_artifacts(artifact_path, Path.cwd()):
-                print("[fenceline] Error: sandbox verified clean, but failed to copy "
-                      "artifacts to host.", file=sys.stderr)
-                self._kill_container()
-                return alerts, 1
+        copy_ok = True
+        if is_pip:
+            copy_ok = self._copy_pip_artifacts()
+        else:
+            artifact_path = _ARTIFACT_PATHS.get(tool_id)
+            if artifact_path:
+                copy_ok = self._copy_artifacts(artifact_path, Path.cwd())
+
+        if not copy_ok:
+            print("[fenceline] Error: sandbox verified clean, but failed to copy "
+                  "artifacts to host.", file=sys.stderr)
+            self._kill_container()
+            return alerts, 1
 
         self._kill_container()
         print(f"[fenceline] Sandbox: done. Install verified and applied.")
@@ -515,6 +527,88 @@ class SandboxedInstall:
         for alert in fs_alerts:
             icon = "!!" if alert.severity == "critical" else "?"
             print(f"  {icon} [{alert.severity.upper()}] {alert.path} — {alert.reason}")
+
+    def _copy_pip_artifacts(self) -> bool:
+        """Copy newly installed pip packages from container to host.
+
+        Diffs pre-install and post-install pip list to find new packages,
+        then copies only those packages' directories.
+        """
+        import json as _json
+
+        # Read pre-install package list saved by the container startup command
+        try:
+            pre_result = subprocess.run(
+                [_docker(), "exec", self._container_id,
+                 "cat", "/tmp/.fenceline-pre-packages.json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            pre_packages = {
+                p["name"].lower() for p in _json.loads(pre_result.stdout)
+            } if pre_result.returncode == 0 and pre_result.stdout.strip() else set()
+        except (subprocess.TimeoutExpired, FileNotFoundError, _json.JSONDecodeError):
+            pre_packages = set()
+
+        # Get post-install package list
+        try:
+            post_result = subprocess.run(
+                [_docker(), "exec", self._container_id,
+                 "pip", "list", "--format=json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            post_packages = {
+                p["name"].lower(): p["name"] for p in _json.loads(post_result.stdout)
+            } if post_result.returncode == 0 and post_result.stdout.strip() else {}
+        except (subprocess.TimeoutExpired, FileNotFoundError, _json.JSONDecodeError):
+            print("[fenceline] Warning: could not list pip packages in container",
+                  file=sys.stderr)
+            return False
+
+        new_packages = {
+            name: original for name, original in post_packages.items()
+            if name not in pre_packages
+        }
+
+        if not new_packages:
+            print("[fenceline] Note: no new pip packages detected to copy.",
+                  file=sys.stderr)
+            return True
+
+        # Find the site-packages directory inside the container
+        try:
+            sp_result = subprocess.run(
+                [_docker(), "exec", self._container_id,
+                 "python3", "-c", "import site; print(site.getsitepackages()[0])"],
+                capture_output=True, text=True, timeout=10,
+            )
+            site_packages = sp_result.stdout.strip() if sp_result.returncode == 0 else ""
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            site_packages = ""
+
+        if not site_packages:
+            print("[fenceline] Warning: could not determine site-packages path",
+                  file=sys.stderr)
+            return False
+
+        print(f"[fenceline] Copying {len(new_packages)} new pip package(s)...")
+        dest = str(Path.cwd()) + "/"
+        all_ok = True
+        for pkg_lower, pkg_original in new_packages.items():
+            # pip normalizes names: requests -> requests/, but some use
+            # the original case or replace - with _
+            for candidate in [pkg_lower, pkg_original, pkg_lower.replace("-", "_"),
+                              pkg_original.replace("-", "_")]:
+                container_path = f"{site_packages}/{candidate}"
+                result = subprocess.run(
+                    [_docker(), "exec", self._container_id, "test", "-d", container_path],
+                    capture_output=True, timeout=5,
+                )
+                if result.returncode == 0:
+                    if not self._copy_artifacts(container_path, Path.cwd()):
+                        all_ok = False
+                    break
+
+        return all_ok
 
     def _copy_artifacts(self, container_path: str, host_dir: Path) -> bool:
         """Copy install artifacts from container to host.

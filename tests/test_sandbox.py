@@ -189,6 +189,69 @@ class TestSandboxedInstall:
         alerts, code = sandbox.run(["npm", "install", "express"])
         assert code == 1  # must fail, not silently succeed
 
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.snapshot_container", return_value={})
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_pip_install_copies_new_packages(self, mock_run, _mock_snap, _mock_docker):
+        """Pip installs should diff package lists and copy new packages."""
+        import json
+
+        pre_packages = json.dumps([{"name": "pip", "version": "24.0"},
+                                   {"name": "setuptools", "version": "69.0"}])
+        post_packages = json.dumps([{"name": "pip", "version": "24.0"},
+                                    {"name": "setuptools", "version": "69.0"},
+                                    {"name": "requests", "version": "2.31.0"}])
+
+        call_count = {"exec": 0}
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock(returncode=0, stderr=b"")
+            if cmd[0:2] == ["docker", "run"]:
+                result.stdout = "pip123container\n"
+            elif cmd[0:2] == ["docker", "wait"]:
+                result.stdout = "0\n"
+            elif cmd[0:2] == ["docker", "exec"]:
+                call_count["exec"] += 1
+                # Route different exec calls
+                if "cat" in cmd:
+                    result.stdout = pre_packages
+                elif "pip" in cmd and "list" in cmd:
+                    result.stdout = post_packages
+                elif "python3" in cmd and "site" in str(cmd):
+                    result.stdout = "/usr/local/lib/python3.12/site-packages\n"
+                elif "test" in cmd and "-d" in cmd:
+                    result.returncode = 0  # directory exists
+                else:
+                    result.stdout = ""
+            elif cmd[0:2] == ["docker", "cp"]:
+                result.returncode = 0
+            elif cmd[0:2] == ["docker", "rm"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        mock_run.side_effect = side_effect
+
+        # Need a deep map with pip tool
+        import ipaddress
+        from fenceline.deepmap.models import AllowedDomain, CDNMap, DeepMap, ToolMap
+        cdn = CDNMap(
+            id="fastly", name="Fastly", asn="AS54113",
+            ipv4_prefixes=[ipaddress.IPv4Network("151.101.0.0/16")],
+            ipv6_prefixes=[],
+        )
+        tool = ToolMap(
+            id="pip", description="pip",
+            primary_domains=[AllowedDomain(domain="pypi.org", cdn_provider="fastly")],
+        )
+        deep_map = DeepMap(tools=[tool], cdns=[cdn])
+
+        sandbox = SandboxedInstall(deep_map)
+        alerts, code = sandbox.run(["pip", "install", "requests"])
+        assert code == 0
+
 
 # --- ContainerMonitor ---
 
