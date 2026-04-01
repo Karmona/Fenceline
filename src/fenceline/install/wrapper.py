@@ -39,29 +39,76 @@ def run(args) -> int:
         return 1
 
     monitor_time = getattr(args, 'monitor_time', 60)
+    output_format = getattr(args, 'output_format', 'text')
 
     if sandbox:
-        return _run_sandboxed(cmd, monitor_time)
+        return _run_sandboxed(cmd, monitor_time, output_format)
     else:
         return _run_host(cmd)
 
 
-def _run_sandboxed(cmd: list[str], monitor_time: int = 60) -> int:
+def _run_sandboxed(cmd: list[str], monitor_time: int = 60,
+                   output_format: str = "text") -> int:
     """Run install in a Docker container (preventive — blocks if suspicious)."""
+    import json
+    import io
+    import time as _time
+
     from fenceline.install.sandbox import SandboxedInstall, docker_available
 
     if not docker_available():
-        print(
-            "[fenceline] Error: Docker is not installed or not running.\n"
-            "[fenceline] Install Docker: https://docs.docker.com/get-docker/\n"
-            "[fenceline] Or run without --sandbox for host-based monitoring.",
-            file=sys.stderr,
-        )
+        if output_format == "json":
+            print(json.dumps({"command": cmd, "verdict": "ERROR",
+                              "error": "Docker is not available"}))
+        else:
+            print(
+                "[fenceline] Error: Docker is not installed or not running.\n"
+                "[fenceline] Install Docker: https://docs.docker.com/get-docker/\n"
+                "[fenceline] Or run without --sandbox for host-based monitoring.",
+                file=sys.stderr,
+            )
         return 1
 
     deep_map = load_maps()
     sandbox = SandboxedInstall(deep_map, monitor_seconds=monitor_time)
-    alerts, exit_code = sandbox.run(cmd)
+
+    if output_format == "json":
+        # Suppress text output, capture it
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+
+    start = _time.monotonic()
+    try:
+        alerts, exit_code = sandbox.run(cmd)
+    finally:
+        if output_format == "json":
+            sys.stdout, sys.stderr = old_stdout, old_stderr
+
+    if output_format == "json":
+        duration = round(_time.monotonic() - start, 2)
+        verdict = "CLEAN" if exit_code == 0 and not alerts else "BLOCKED"
+        if exit_code != 0 and not alerts:
+            verdict = "ERROR"
+
+        result = {
+            "command": cmd,
+            "verdict": verdict,
+            "exit_code": exit_code,
+            "alerts": [
+                {
+                    "severity": a.severity,
+                    "reason": a.reason,
+                    "remote_ip": a.connection.remote_ip,
+                    "remote_port": a.connection.remote_port,
+                    "process": a.connection.process_name,
+                }
+                for a in alerts
+            ],
+            "duration_seconds": duration,
+        }
+        print(json.dumps(result, indent=2))
+
     return exit_code
 
 

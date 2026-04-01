@@ -67,6 +67,43 @@ class TestWrapperScript:
         assert "REAL_CMD" in _WRAPPER_SCRIPT
 
 
+class TestJsonOutput:
+    """Test structured JSON output for CI integration."""
+
+    def test_cli_accepts_format_flag(self):
+        from fenceline.cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["install", "--format", "json", "--sandbox", "npm", "install", "x"])
+        assert args.output_format == "json"
+
+    def test_cli_format_defaults_to_text(self):
+        from fenceline.cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["install", "--sandbox", "npm", "install", "x"])
+        assert args.output_format == "text"
+
+    @patch("fenceline.install.sandbox.docker_available", return_value=False)
+    def test_json_output_on_docker_unavailable(self, _mock_docker):
+        """When Docker is unavailable, JSON mode should output valid JSON."""
+        import json
+        import io
+        from fenceline.install.wrapper import _run_sandboxed
+
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+        try:
+            code = _run_sandboxed(["npm", "install", "express"], output_format="json")
+        finally:
+            sys.stdout = old_stdout
+
+        output = captured.getvalue()
+        result = json.loads(output)
+        assert result["verdict"] == "ERROR"
+        assert result["command"] == ["npm", "install", "express"]
+        assert code == 1
+
+
 class TestWrapperFilesystem:
     """Test wrapper enable/disable filesystem operations."""
 

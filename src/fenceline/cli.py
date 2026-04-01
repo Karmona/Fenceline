@@ -89,6 +89,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--verbose", "-v", action="store_true", help="Verbose output"
     )
     install_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        dest="output_format",
+        help="Output format (default: text). JSON is useful for CI integration.",
+    )
+    install_parser.add_argument(
         "install_cmd",
         nargs=argparse.REMAINDER,
         help="Command to run (e.g., npm install express)",
