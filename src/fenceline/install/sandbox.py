@@ -11,6 +11,7 @@ Requires Docker to be installed and running.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -73,6 +74,17 @@ def _docker() -> str:
     if _DOCKER_BIN is None:
         _DOCKER_BIN = _find_docker()
     return _DOCKER_BIN
+
+
+_VALID_PKG_NAME = re.compile(r'^[@a-zA-Z0-9._/-]+$')
+
+
+def _safe_package_name(name: str) -> bool:
+    """Validate package name contains only safe characters.
+
+    Prevents injection when name is interpolated into require()/import.
+    """
+    return bool(_VALID_PKG_NAME.match(name)) and '..' not in name
 
 
 def _extract_package_name(cmd: list[str]) -> Optional[str]:
@@ -458,6 +470,10 @@ class SandboxedInstall:
         # container. Many attacks activate on require()/import, not during
         # install. The container is still alive (sleep period).
         pkg_name = _extract_package_name(cmd)
+        if pkg_name and not _safe_package_name(pkg_name):
+            print(f"[fenceline] Warning: skipping import test — unusual package name",
+                  file=sys.stderr)
+            pkg_name = None
         if pkg_name:
             print(f"[fenceline] Sandbox: Stage 2 — testing import of '{pkg_name}'...")
             try:

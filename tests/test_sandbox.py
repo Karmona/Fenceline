@@ -9,8 +9,38 @@ from fenceline.install.sandbox import (
     parse_ss_output,
     SandboxedInstall,
     ContainerMonitor,
+    _safe_package_name,
 )
 from fenceline.install.monitor import Connection
+
+
+# --- _safe_package_name ---
+
+
+class TestSafePackageName:
+    def test_normal_package(self):
+        assert _safe_package_name("express") is True
+
+    def test_scoped_package(self):
+        assert _safe_package_name("@types/node") is True
+
+    def test_package_with_dots(self):
+        assert _safe_package_name("co.js") is True
+
+    def test_injection_attempt_semicolon(self):
+        assert _safe_package_name("foo';process.exit()//") is False
+
+    def test_injection_attempt_quotes(self):
+        assert _safe_package_name("foo\"bar") is False
+
+    def test_path_traversal(self):
+        assert _safe_package_name("../../../etc/passwd") is False
+
+    def test_empty_string(self):
+        assert _safe_package_name("") is False
+
+    def test_spaces(self):
+        assert _safe_package_name("foo bar") is False
 
 
 # --- docker_available ---

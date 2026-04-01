@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
@@ -19,7 +20,7 @@ def get_package_info(name: str) -> dict | None:
 
     Returns the parsed JSON document, or ``None`` on 404 / network error.
     """
-    url = f"{_REGISTRY}/{name}"
+    url = f"{_REGISTRY}/{urllib.parse.quote(name, safe='@/')}"
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
 
     try:
@@ -93,7 +94,7 @@ def get_pypi_package_info(name: str) -> dict | None:
 
     Returns the parsed JSON document, or ``None`` on 404 / network error.
     """
-    url = f"{_PYPI_REGISTRY}/pypi/{name}/json"
+    url = f"{_PYPI_REGISTRY}/pypi/{urllib.parse.quote(name, safe='')}/json"
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
 
     try:

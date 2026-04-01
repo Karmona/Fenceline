@@ -182,6 +182,8 @@ def _is_harmless_path(path: str) -> bool:
     if "/app/.cache/" in path or "/app/.npm/" in path:
         return True
     if path.startswith("/tmp/"):
-        # /tmp is OK for temp files during build, but not for binaries
-        return not _is_executable("755")  # We flag /tmp executables elsewhere
+        # /tmp is expected for build artifacts (webpack, babel, etc.).
+        # Executables in /tmp are still caught by check_suspicious_files()
+        # because /tmp is not in _EXPECTED_DIRS.
+        return True
     return False
