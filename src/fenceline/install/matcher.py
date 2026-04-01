@@ -85,4 +85,21 @@ def check_connection(
             severity="warning",
         )
 
+    # 4. Check if the process making the connection is expected for this tool.
+    # Catches curl, wget, bash etc. spawned by malicious install scripts.
+    if (
+        tool_map.expected_processes
+        and conn.process_name
+        and conn.process_name != "(iptables)"  # iptables log doesn't know process
+    ):
+        if conn.process_name not in tool_map.expected_processes:
+            return Alert(
+                connection=conn,
+                reason=(
+                    f"Unexpected process '{conn.process_name}' making network connection "
+                    f"(expected: {', '.join(tool_map.expected_processes)})"
+                ),
+                severity="warning",
+            )
+
     return None

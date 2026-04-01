@@ -4,6 +4,7 @@
 
 id: pip_pypi
 description: "Python package installer (pip) + Python Package Index (PyPI)"
+expected_processes: ["python", "python3", "pip", "pip3"]
 
 primary_domains:
   - domain: pypi.org

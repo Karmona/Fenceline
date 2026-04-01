@@ -4,6 +4,7 @@
 
 id: npm
 description: "Node.js package manager (npm CLI)"
+expected_processes: ["node", "npm", "npx"]
 
 primary_domains:
   - domain: registry.npmjs.org

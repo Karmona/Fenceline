@@ -4,6 +4,7 @@
 
 id: yarn
 description: "Yarn package manager (Classic v1 and Berry v2+)"
+expected_processes: ["node", "yarn"]
 
 primary_domains:
   - domain: registry.yarnpkg.com

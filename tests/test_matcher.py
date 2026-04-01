@@ -37,6 +37,7 @@ def _make_deep_map() -> DeepMap:
                 cdn_provider="cloudflare",
             )
         ],
+        expected_processes=["node", "npm", "npx"],
     )
     return DeepMap(tools=[tool], cdns=[cdn])
 
@@ -128,3 +129,70 @@ class TestIPv6Matching:
 
         assert alert is not None
         assert alert.severity == "critical"
+
+
+class TestExpectedProcess:
+    """Expected-process heuristic catches unexpected network processes."""
+
+    def test_expected_process_no_alert(self):
+        """npm/node making connections should be fine."""
+        deep_map = _make_deep_map()
+        conn = _make_connection("104.16.0.1")  # process_name="npm" by default
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is None
+
+    def test_unexpected_curl_warns(self):
+        """curl making connections during npm install is suspicious."""
+        deep_map = _make_deep_map()
+        conn = Connection(
+            pid=999, process_name="curl",
+            remote_ip="104.16.0.1", remote_port=443,
+            protocol="TCP", timestamp=0.0,
+        )
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is not None
+        assert alert.severity == "warning"
+        assert "curl" in alert.reason
+
+    def test_unexpected_wget_warns(self):
+        deep_map = _make_deep_map()
+        conn = Connection(
+            pid=999, process_name="wget",
+            remote_ip="104.16.0.1", remote_port=443,
+            protocol="TCP", timestamp=0.0,
+        )
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is not None
+
+    def test_unexpected_bash_warns(self):
+        deep_map = _make_deep_map()
+        conn = Connection(
+            pid=999, process_name="bash",
+            remote_ip="104.16.0.1", remote_port=443,
+            protocol="TCP", timestamp=0.0,
+        )
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is not None
+
+    def test_iptables_log_process_skipped(self):
+        """iptables log entries don't know the process, should not alert."""
+        deep_map = _make_deep_map()
+        conn = Connection(
+            pid=0, process_name="(iptables)",
+            remote_ip="104.16.0.1", remote_port=443,
+            protocol="TCP", timestamp=0.0,
+        )
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is None
+
+    def test_no_expected_processes_skips_check(self):
+        """If tool has no expected_processes, skip the check."""
+        deep_map = _make_deep_map()
+        deep_map.tools[0].expected_processes = []
+        conn = Connection(
+            pid=999, process_name="curl",
+            remote_ip="104.16.0.1", remote_port=443,
+            protocol="TCP", timestamp=0.0,
+        )
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is None

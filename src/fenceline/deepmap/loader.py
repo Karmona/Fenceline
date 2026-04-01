@@ -61,6 +61,7 @@ def load_tool(path: Path) -> ToolMap:
         uploads_during_install=data.get("uploads_during_install", False),
         telemetry=data.get("telemetry", {}),
         known_mirrors=data.get("known_mirrors", []),
+        expected_processes=data.get("expected_processes", []),
         notes=data.get("notes", ""),
     )
 

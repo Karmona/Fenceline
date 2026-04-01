@@ -35,6 +35,7 @@ class ToolMap:
     uploads_during_install: bool = False
     telemetry: dict = field(default_factory=dict)
     known_mirrors: List[str] = field(default_factory=list)
+    expected_processes: List[str] = field(default_factory=list)
     notes: str = ""
 
 
