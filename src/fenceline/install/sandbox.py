@@ -485,11 +485,14 @@ class SandboxedInstall:
         logger.info(f"Sandbox: pulling {image}...")
 
         # Start container — run the command, then keep alive for monitoring.
-        # iptables LOG captures every outbound TCP SYN for post-hoc analysis
-        # (eliminates polling race condition). Falls back silently if unavailable.
+        # iptables LOG captures every outbound TCP SYN and DNS query for
+        # post-hoc analysis (eliminates polling race condition).
+        # Falls back silently if iptables unavailable.
         iptables_setup = (
             "iptables -A OUTPUT -p tcp --syn -j LOG "
             "--log-prefix 'FENCELINE:' --log-level 4 2>/dev/null ; "
+            "iptables -A OUTPUT -p udp --dport 53 -j LOG "
+            "--log-prefix 'FENCELINE_DNS:' --log-level 4 2>/dev/null ; "
         )
 
         # For pip, we also snapshot the pre-install package list so we can
@@ -632,6 +635,13 @@ class SandboxedInstall:
             print(f"[fenceline] ACTION: Do not retry or bypass. Investigate the package before use.")
             self._kill_container()
             return alerts, 1
+
+        # --- DNS activity check (informational) ---
+        from fenceline.install.dns_monitor import get_dns_queries_from_container, check_dns_activity
+        dns_servers = get_dns_queries_from_container(_docker(), self._container_id)
+        dns_warning = check_dns_activity(dns_servers)
+        if dns_warning:
+            logger.warning(f"DNS: {dns_warning}")
 
         # Clean install — copy artifacts to host
         logger.info("Sandbox: install clean. Copying artifacts to host...")
