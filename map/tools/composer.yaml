@@ -4,6 +4,7 @@
 
 id: composer_packagist
 description: "PHP dependency manager (Composer) + Packagist.org registry"
+expected_processes: ["composer", "php"]
 
 primary_domains:
   - domain: packagist.org

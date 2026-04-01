@@ -4,6 +4,7 @@
 
 id: homebrew
 description: "macOS/Linux package manager (brew)"
+expected_processes: ["brew"]
 
 primary_domains:
   - domain: formulae.brew.sh

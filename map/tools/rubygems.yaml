@@ -4,6 +4,7 @@
 
 id: rubygems
 description: "Ruby package manager (gem) + RubyGems.org registry"
+expected_processes: ["gem", "bundle", "bundler", "ruby"]
 
 primary_domains:
   - domain: rubygems.org

@@ -4,6 +4,7 @@
 
 id: go_modules
 description: "Go module proxy and checksum database"
+expected_processes: ["go"]
 
 primary_domains:
   - domain: proxy.golang.org

@@ -4,6 +4,7 @@
 
 id: cargo_crates
 description: "Rust package manager (cargo) + crates.io registry"
+expected_processes: ["cargo", "rustc"]
 
 primary_domains:
   - domain: crates.io

@@ -24,10 +24,10 @@ from fenceline.deepmap.models import DeepMap
 from fenceline.install.fsdiff import snapshot_container, diff_snapshots, check_suspicious_files, FsAlert
 from fenceline.install.http_logger import PROXY_SCRIPT, NODE_PROXY_SCRIPT, parse_http_log, check_http_behavior
 from fenceline.install.matcher import check_connection
+from fenceline.install.monitor import Alert, Connection
 from fenceline.log import get_logger
 
 logger = get_logger(__name__)
-from fenceline.install.monitor import Alert, Connection
 
 
 # Map package manager commands to Docker base images
