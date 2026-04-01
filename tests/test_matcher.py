@@ -196,3 +196,36 @@ class TestExpectedProcess:
         )
         alert = check_connection(conn, deep_map, "npm")
         assert alert is None
+
+
+class TestLocalhostFiltering:
+    """Localhost/loopback connections should be ignored (intra-container traffic)."""
+
+    def test_loopback_ipv4_ignored(self):
+        """127.0.0.1 connections (e.g., to HTTP proxy) should not alert."""
+        deep_map = _make_deep_map()
+        conn = _make_connection("127.0.0.1", remote_port=8899)
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is None
+
+    def test_loopback_ipv4_any_port_ignored(self):
+        """Any port on 127.0.0.1 is fine (ephemeral proxy connections)."""
+        deep_map = _make_deep_map()
+        conn = _make_connection("127.0.0.1", remote_port=45074)
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is None
+
+    def test_loopback_ipv6_ignored(self):
+        """::1 connections should also be ignored."""
+        deep_map = _make_deep_map()
+        conn = _make_connection("::1", remote_port=8899)
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is None
+
+    def test_non_loopback_still_checked(self):
+        """Non-loopback IPs on non-standard ports should still alert."""
+        deep_map = _make_deep_map()
+        conn = _make_connection("10.0.0.1", remote_port=8080)
+        alert = check_connection(conn, deep_map, "npm")
+        assert alert is not None
+        assert alert.severity == "critical"

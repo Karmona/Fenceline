@@ -131,6 +131,49 @@ if __name__ == "__main__":
 '''
 
 
+# Node.js equivalent of PROXY_SCRIPT for Node containers (npm, yarn, pnpm).
+# Uses only built-in modules (http, net, fs) — no npm install needed.
+NODE_PROXY_SCRIPT = '''\
+const http = require("http");
+const net = require("net");
+const fs = require("fs");
+const LOG = "/tmp/fenceline-http.log";
+function log(method, host, path) {
+  fs.appendFileSync(LOG, method + " " + host + " " + (path || "") + "\\n");
+}
+const server = http.createServer(function(req, res) {
+  // Plain HTTP request — log method + host + path
+  var host = req.headers.host || "";
+  log(req.method, host, req.url);
+  res.writeHead(502);
+  res.end("Fenceline: plain HTTP not proxied");
+});
+server.on("connect", function(req, socket, head) {
+  // HTTPS CONNECT — log target, then tunnel
+  var target = req.url;
+  log("CONNECT", target);
+  var parts = target.split(":");
+  var host = parts[0];
+  var port = parseInt(parts[1]) || 443;
+  var remote = net.createConnection(port, host, function() {
+    socket.write("HTTP/1.1 200 Connection Established\\r\\n\\r\\n");
+    if (head && head.length) remote.write(head);
+    remote.pipe(socket);
+    socket.pipe(remote);
+  });
+  remote.on("error", function() {
+    try { socket.end(); } catch(e) {}
+  });
+  socket.on("error", function() {
+    try { remote.end(); } catch(e) {}
+  });
+});
+server.listen(8899, "127.0.0.1", function() {
+  // Proxy ready
+});
+'''
+
+
 @dataclass
 class HttpLogEntry:
     """A parsed HTTP proxy log entry."""

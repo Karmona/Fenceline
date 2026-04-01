@@ -8,7 +8,9 @@ All notable changes to this project will be documented in this file.
 - **iptables LOG monitoring** — captures every outbound TCP SYN and DNS query inside the container with zero race condition. Eliminates the 500ms polling gap.
 - **Expected-process heuristic** — detects curl, wget, bash etc. making network connections during installs. Maps expected processes per tool via deep map YAML.
 - **DNS query monitoring** — captures outbound UDP port 53 via iptables LOG. Detects DNS tunneling and unusual resolver activity.
-- **HTTP behavior analysis** — logging proxy (pip containers) captures CONNECT targets and HTTP methods. Detects POST/PUT to unexpected domains. Node containers use iptables + process heuristic instead.
+- **HTTP behavior analysis** — logging proxy captures CONNECT targets and HTTP methods. Node.js proxy for npm/yarn/pnpm containers, Python proxy for pip containers. Detects POST/PUT to unexpected domains.
+- **Node.js HTTP proxy** — standalone proxy using only built-in `http`/`net` modules. Runs inside Node containers on port 8899, provides L7 visibility for npm/yarn/pnpm installs.
+- **Loopback connection filtering** — intra-container connections (127.0.0.1, ::1) are now ignored by the matcher. Prevents false positives from the HTTP proxy itself.
 - **Registry caching** — 1-hour file cache for npm/PyPI lookups in `~/.cache/fenceline/`. Makes repeated `fenceline check` runs fast.
 - **Capability diffing** — detects when postinstall/preinstall scripts are added between package versions. Common attack pattern.
 - **Output formatters** — colored console output (ANSI, respects NO_COLOR) and GitHub markdown tables with emoji status indicators.
@@ -21,7 +23,8 @@ All notable changes to this project will be documented in this file.
 - Docker integration tests (real end-to-end with containers).
 - CLAUDE.md with instructions for AI coding tools.
 - Example project in `examples/safe-project/` for local testing.
-- 289 tests across 19 test files (up from 83 in v0.5.0).
+- Package validation script (`tools/validate-packages.sh`) — tests 10 npm + 10 pip packages through sandbox.
+- 305 tests across 19 test files (up from 83 in v0.5.0).
 
 ### Changed
 - README restructured for adoption: Quick Start first, wrapper-led, Problem section shortened.
@@ -31,6 +34,8 @@ All notable changes to this project will be documented in this file.
 - Package metadata aligned to Node-first positioning.
 
 ### Fixed
+- **Container lifecycle fix** — post-install checks (Stage 2, filesystem diff, DNS, HTTP, pip artifacts) now run while the container is still alive. Previously `docker wait` blocked until the container stopped, causing all `docker exec`-based checks to fail silently.
+- **Install speed** — installs complete in ~10s instead of ~65s (no longer waits for unnecessary 60s sleep period).
 - `docker cp` now checks returncode — failed copy no longer silently reports success.
 - `fenceline install` (no args) now shows install-specific help, not top-level help.
 - Package name validation before Stage 2 import (prevents injection inside container).

@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple
 
 from fenceline.deepmap.models import DeepMap
 from fenceline.install.fsdiff import snapshot_container, diff_snapshots, check_suspicious_files, FsAlert
-from fenceline.install.http_logger import PROXY_SCRIPT, parse_http_log, check_http_behavior
+from fenceline.install.http_logger import PROXY_SCRIPT, NODE_PROXY_SCRIPT, parse_http_log, check_http_behavior
 from fenceline.install.matcher import check_connection
 from fenceline.log import get_logger
 
@@ -485,10 +485,10 @@ class SandboxedInstall:
 
         logger.info(f"Sandbox: pulling {image}...")
 
-        # Start container — run the command, then keep alive for monitoring.
-        # iptables LOG captures every outbound TCP SYN and DNS query for
-        # post-hoc analysis (eliminates polling race condition).
-        # Falls back silently if iptables unavailable.
+        # Start a long-lived container with iptables setup, proxy, and sleep.
+        # The install runs via docker exec so the container stays alive for
+        # post-install checks (Stage 2, filesystem diff, DNS/HTTP analysis,
+        # artifact copy). Without this, docker exec fails on a stopped container.
         iptables_setup = (
             "iptables -A OUTPUT -p tcp --syn -j LOG "
             "--log-prefix 'FENCELINE:' --log-level 4 2>/dev/null ; "
@@ -496,12 +496,13 @@ class SandboxedInstall:
             "--log-prefix 'FENCELINE_DNS:' --log-level 4 2>/dev/null ; "
         )
 
-        # HTTP logging proxy setup — only for Python containers (which have python3).
-        # For Node containers, we rely on iptables LOG + expected-process heuristic.
+        # HTTP logging proxy setup — captures CONNECT targets and HTTP methods.
+        # Python containers use a Python proxy script; Node containers use a
+        # Node.js proxy script. Both log to /tmp/fenceline-http.log.
         is_pip = tool_id in ("pip", "pip3")
+        is_node = tool_id in ("npm", "npx", "yarn", "pnpm")
         proxy_setup = ""
         if is_pip:
-            # Write proxy script and start it in background, set env vars
             escaped_script = PROXY_SCRIPT.replace("'", "'\\''")
             proxy_setup = (
                 f"echo '{escaped_script}' > /tmp/fenceline-proxy.py ; "
@@ -509,21 +510,24 @@ class SandboxedInstall:
                 "export HTTP_PROXY=http://127.0.0.1:8899 ; "
                 "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
             )
+        elif is_node:
+            escaped_script = NODE_PROXY_SCRIPT.replace("'", "'\\''")
+            proxy_setup = (
+                f"echo '{escaped_script}' > /tmp/fenceline-proxy.js ; "
+                "node /tmp/fenceline-proxy.js & "
+                "sleep 0.2 ; "  # brief wait for proxy to bind
+                "export HTTP_PROXY=http://127.0.0.1:8899 ; "
+                "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
+            )
 
-        # For pip, also snapshot the pre-install package list.
+        # The container runs setup (iptables, proxy, pre-install snapshot)
+        # then stays alive with sleep. Install runs via docker exec.
+        pip_pre = ""
         if is_pip:
-            shell_cmd = (
-                iptables_setup + proxy_setup
-                + "pip list --format=json > /tmp/.fenceline-pre-packages.json 2>/dev/null ; "
-                + f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
-                + f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
-            )
-        else:
-            shell_cmd = (
-                iptables_setup
-                + f"{' '.join(shlex.quote(c) for c in cmd)} ; FENCELINE_EXIT=$? ; "
-                + f"sleep {monitor_secs} ; exit $FENCELINE_EXIT"
-            )
+            pip_pre = "pip list --format=json > /tmp/.fenceline-pre-packages.json 2>/dev/null ; "
+
+        setup_cmd = iptables_setup + proxy_setup + pip_pre + "sleep 86400"
+
         try:
             start_result = subprocess.run(
                 [
@@ -531,7 +535,7 @@ class SandboxedInstall:
                     "--cap-add=NET_ADMIN",
                     "-w", "/app",
                     image,
-                    "sh", "-c", shell_cmd,
+                    "sh", "-c", setup_cmd,
                 ],
                 capture_output=True,
                 text=True,
@@ -559,20 +563,29 @@ class SandboxedInstall:
         )
         monitor.start()
 
-        # Wait for the container to finish using Popen (non-blocking wait
-        # via communicate) so the monitor thread can poll connections.
+        # Run the install command inside the running container.
+        # The container stays alive after this, so docker exec works
+        # for all post-install checks.
         logger.info(f"Sandbox: monitoring network for ~{monitor_secs}s...")
-        try:
-            wait_proc = subprocess.Popen(
-                [_docker(), "wait", self._container_id],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+        install_cmd_str = ' '.join(shlex.quote(c) for c in cmd)
+        # docker exec starts a new shell — proxy env vars from the setup
+        # shell aren't inherited, so set them explicitly.
+        proxy_env = ""
+        if is_pip or is_node:
+            proxy_env = (
+                "export HTTP_PROXY=http://127.0.0.1:8899 ; "
+                "export HTTPS_PROXY=http://127.0.0.1:8899 ; "
             )
-            stdout, _ = wait_proc.communicate(timeout=self._timeout)
-            try:
-                exit_code = int(stdout.decode().strip())
-            except (ValueError, TypeError):
-                exit_code = 0
+        exec_cmd = proxy_env + install_cmd_str
+        try:
+            install_result = subprocess.run(
+                [_docker(), "exec", self._container_id,
+                 "sh", "-c", exec_cmd],
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
+            )
+            exit_code = install_result.returncode
         except subprocess.TimeoutExpired:
             logger.warning(f"Sandbox: timeout after {self._timeout}s — killing container")
             self._kill_container()
@@ -583,6 +596,9 @@ class SandboxedInstall:
             self._kill_container()
             alerts = monitor.stop()
             return alerts, 130
+
+        # Brief monitoring period after install completes
+        time.sleep(min(monitor_secs, 5))
 
         # --- Stage 1 complete: check for install-time alerts ---
         stage1_alerts = list(monitor._alerts)
@@ -657,7 +673,7 @@ class SandboxedInstall:
             logger.warning(f"DNS: {dns_warning}")
 
         # --- HTTP behavior check (for containers with proxy) ---
-        if is_pip:
+        if is_pip or is_node:
             try:
                 http_result = subprocess.run(
                     [_docker(), "exec", self._container_id,

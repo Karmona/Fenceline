@@ -32,7 +32,7 @@ CLI (cli.py) → wrap.py (transparent interception)
 
 - **Container runs with `--cap-add=NET_ADMIN`** for iptables LOG rules
 - **iptables captures EVERY outbound TCP SYN and DNS query** — eliminates polling race condition
-- **HTTP proxy runs on port 8899 inside Python containers** — captures CONNECT targets + HTTP methods
+- **HTTP proxy runs on port 8899 inside all containers** — Node.js proxy for npm/yarn/pnpm, Python proxy for pip. Captures CONNECT targets + HTTP methods
 - **Filesystem diff uses `docker exec find -printf`** — pre/post install comparison
 - **Registry lookups cached in `~/.cache/fenceline/`** — 1-hour TTL, overridable via `FENCELINE_CACHE_DIR` env var
 - **Package names validated** against `^[@a-zA-Z0-9._/-]+$` before Stage 2 import
@@ -48,7 +48,7 @@ CLI (cli.py) → wrap.py (transparent interception)
 5. **Filesystem diffing** — dropped binaries, files in /etc, /root, /home, suspicious extensions
 6. **Import monitoring** — Stage 2 runs require()/import() inside container
 7. **DNS monitoring** — captures outbound UDP port 53, flags unusual resolver activity
-8. **HTTP behavior** — CONNECT proxy logs target domains, POST/PUT to unexpected domains flagged (pip containers only; Node uses iptables + process heuristic)
+8. **HTTP behavior** — CONNECT proxy logs target domains, POST/PUT to unexpected domains flagged (Node.js proxy for npm/yarn/pnpm, Python proxy for pip)
 9. **Metadata scoring** — package age, maintainer changes, missing provenance, new package signal
 10. **Capability escalation** — detects postinstall/preinstall added between versions (+20 pts each)
 
@@ -163,13 +163,11 @@ ruff check src/ tests/                               # linting (line-length 100)
 - 2-year slow-burn attacks (XZ utils) — no metadata anomaly until activation
 - CI/CD pipeline compromise — happens in GitHub, not on dev machines
 - HTTPS payload inspection requires MITM (not implemented, only CONNECT target logged)
-- HTTP proxy only runs in pip containers (Node has no python3); Node relies on iptables + process heuristic
 - Pip artifact copy promotes package dirs + .dist-info but not console scripts (bin/)
 
 ## What's next (future work)
 
 - CI enforcement mode (fail PR checks based on sandbox results)
-- HTTP proxy for Node containers (Node.js-based or mitmdump)
 - Pip console script promotion (bin/ directory)
 - eBPF tracing for deeper syscall visibility
 - HTTPS payload inspection via container CA injection

@@ -19,6 +19,14 @@ def check_connection(
     2. IP not in any known CDN CIDR range -> warning
     3. IP in a CDN range but that CDN isn't used by this tool -> warning
     """
+    # 0. Skip localhost/loopback — intra-container traffic (e.g., HTTP proxy)
+    try:
+        addr_check = ipaddress.ip_address(conn.remote_ip)
+        if addr_check.is_loopback:
+            return None
+    except ValueError:
+        pass  # will be caught below
+
     # 1. Non-standard port
     if conn.remote_port != 443:
         return Alert(

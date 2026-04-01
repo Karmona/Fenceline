@@ -375,3 +375,153 @@ class TestContainerMonitor:
         monitor = ContainerMonitor("abc123", self._make_deep_map(), "npm")
         conns = monitor._get_container_connections()
         assert conns == []
+
+
+# --- Node proxy setup in sandbox ---
+
+
+class TestNodeProxySetup:
+    """Verify that the sandbox sets up HTTP proxy for Node containers."""
+
+    def _make_deep_map(self):
+        import ipaddress
+        from fenceline.deepmap.models import AllowedDomain, CDNMap, DeepMap, ToolMap
+        cdn = CDNMap(
+            id="cloudflare", name="Cloudflare", asn="AS13335",
+            ipv4_prefixes=[ipaddress.IPv4Network("104.16.0.0/16")],
+            ipv6_prefixes=[],
+        )
+        tool = ToolMap(
+            id="npm", description="npm",
+            primary_domains=[AllowedDomain(domain="registry.npmjs.org", cdn_provider="cloudflare")],
+        )
+        return DeepMap(tools=[tool], cdns=[cdn])
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_npm_container_gets_node_proxy(self, mock_run, _mock_docker):
+        """npm install should set up the Node.js HTTP proxy."""
+        docker_run_cmd = None
+
+        def side_effect(*args, **kwargs):
+            nonlocal docker_run_cmd
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock(returncode=0, stderr="")
+            if cmd[0:2] == ["docker", "run"]:
+                docker_run_cmd = cmd
+                result.stdout = "node123container\n"
+            elif cmd[0:2] == ["docker", "wait"]:
+                result.stdout = "0\n"
+            elif cmd[0:2] == ["docker", "exec"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "cp"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "rm"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        mock_run.side_effect = side_effect
+
+        sandbox = SandboxedInstall(self._make_deep_map())
+        sandbox.run(["npm", "install", "express"])
+
+        # The docker run command should contain the shell command
+        assert docker_run_cmd is not None
+        shell_cmd = docker_run_cmd[-1]  # last arg is the shell command
+        assert "fenceline-proxy.js" in shell_cmd, (
+            f"Node proxy script not found in shell cmd: {shell_cmd}"
+        )
+        assert "node /tmp/fenceline-proxy.js" in shell_cmd
+        assert "HTTP_PROXY=http://127.0.0.1:8899" in shell_cmd
+        assert "HTTPS_PROXY=http://127.0.0.1:8899" in shell_cmd
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_yarn_container_gets_node_proxy(self, mock_run, _mock_docker):
+        """yarn add should also set up the Node.js HTTP proxy."""
+        docker_run_cmd = None
+
+        def side_effect(*args, **kwargs):
+            nonlocal docker_run_cmd
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock(returncode=0, stderr="")
+            if cmd[0:2] == ["docker", "run"]:
+                docker_run_cmd = cmd
+                result.stdout = "yarn123container\n"
+            elif cmd[0:2] == ["docker", "wait"]:
+                result.stdout = "0\n"
+            elif cmd[0:2] == ["docker", "exec"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "cp"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "rm"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        mock_run.side_effect = side_effect
+
+        sandbox = SandboxedInstall(self._make_deep_map())
+        sandbox.run(["yarn", "add", "lodash"])
+
+        assert docker_run_cmd is not None
+        shell_cmd = docker_run_cmd[-1]
+        assert "fenceline-proxy.js" in shell_cmd
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_pip_still_uses_python_proxy(self, mock_run, _mock_docker):
+        """pip install should still use the Python proxy, not Node."""
+        docker_run_cmd = None
+
+        def side_effect(*args, **kwargs):
+            nonlocal docker_run_cmd
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock(returncode=0, stderr="")
+            if cmd[0:2] == ["docker", "run"]:
+                docker_run_cmd = cmd
+                result.stdout = "pip123container\n"
+            elif cmd[0:2] == ["docker", "wait"]:
+                result.stdout = "0\n"
+            elif cmd[0:2] == ["docker", "exec"]:
+                if "cat" in cmd:
+                    result.stdout = "[]"  # empty pre-packages
+                elif "pip" in cmd and "list" in cmd:
+                    result.stdout = "[]"
+                elif "python3" in cmd:
+                    result.stdout = "/usr/lib/python3/site-packages\n"
+                else:
+                    result.stdout = ""
+            elif cmd[0:2] == ["docker", "cp"]:
+                result.stdout = ""
+            elif cmd[0:2] == ["docker", "rm"]:
+                result.stdout = ""
+            else:
+                result.stdout = ""
+            return result
+
+        mock_run.side_effect = side_effect
+
+        import ipaddress
+        from fenceline.deepmap.models import AllowedDomain, CDNMap, DeepMap, ToolMap
+        cdn = CDNMap(
+            id="fastly", name="Fastly", asn="AS54113",
+            ipv4_prefixes=[ipaddress.IPv4Network("151.101.0.0/16")],
+            ipv6_prefixes=[],
+        )
+        tool = ToolMap(
+            id="pip", description="pip",
+            primary_domains=[AllowedDomain(domain="pypi.org", cdn_provider="fastly")],
+        )
+        deep_map = DeepMap(tools=[tool], cdns=[cdn])
+
+        sandbox = SandboxedInstall(deep_map)
+        sandbox.run(["pip", "install", "requests"])
+
+        assert docker_run_cmd is not None
+        shell_cmd = docker_run_cmd[-1]
+        assert "fenceline-proxy.py" in shell_cmd, "pip should use Python proxy"
+        assert "fenceline-proxy.js" not in shell_cmd, "pip should NOT use Node proxy"
