@@ -962,6 +962,32 @@ class SandboxedInstall:
             logger.info(f"Copied {copied} console script(s) to {host_bin}")
         return failed == 0
 
+    # Well-known PyPI distribution→import name renames.
+    # These packages are common enough that we should handle them even
+    # when top_level.txt is missing from .dist-info.
+    _PIP_IMPORT_RENAMES = {
+        "pillow": "PIL",
+        "python-dateutil": "dateutil",
+        "pyyaml": "yaml",
+        "scikit-learn": "sklearn",
+        "scikit-image": "skimage",
+        "opencv-python": "cv2",
+        "opencv-contrib-python": "cv2",
+        "beautifulsoup4": "bs4",
+        "google-auth": "google.auth",
+        "google-cloud-storage": "google.cloud.storage",
+        "google-api-python-client": "googleapiclient",
+        "python-dotenv": "dotenv",
+        "python-magic": "magic",
+        "attrs": "attr",
+        "msgpack-python": "msgpack",
+        "pyserial": "serial",
+        "pymongo": "pymongo",  # same, but included for completeness
+        "pyjwt": "jwt",
+        "pysocks": "socks",
+        "pyopenssl": "OpenSSL",
+    }
+
     def _resolve_pip_import_name(self, dist_name: str) -> Optional[str]:
         """Resolve a PyPI distribution name to its Python import name.
 
@@ -971,12 +997,18 @@ class SandboxedInstall:
         - python-dateutil → dateutil
 
         Strategy:
-        1. Try top_level.txt from the installed .dist-info metadata
-        2. Fall back to hyphen→underscore conversion
-        3. Validate the result is a valid Python identifier
+        1. Check well-known renames table
+        2. Try top_level.txt from the installed .dist-info metadata
+        3. Fall back to hyphen→underscore conversion
+        4. Validate the result is a valid Python identifier
         """
         if not self._container_id:
             return None
+
+        # Check well-known renames first (faster than docker exec)
+        lowered = dist_name.lower()
+        if lowered in self._PIP_IMPORT_RENAMES:
+            return self._PIP_IMPORT_RENAMES[lowered]
 
         # Try reading top_level.txt from .dist-info
         normalized = dist_name.replace("-", "_").lower()

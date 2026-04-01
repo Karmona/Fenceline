@@ -612,3 +612,54 @@ class TestDryRun:
         sandbox.run(["npm", "install", "is-odd"])
 
         assert docker_cp_called, "non-dry-run should call docker cp"
+
+
+# --- Pip import name resolution ---
+
+
+class TestPipImportNameResolution:
+    """Verify distribution→import name mapping for Stage 2 pip imports."""
+
+    def test_well_known_renames(self):
+        """Well-known renames should be resolved without Docker."""
+        renames = SandboxedInstall._PIP_IMPORT_RENAMES
+        assert renames["pillow"] == "PIL"
+        assert renames["pyyaml"] == "yaml"
+        assert renames["python-dateutil"] == "dateutil"
+        assert renames["scikit-learn"] == "sklearn"
+        assert renames["beautifulsoup4"] == "bs4"
+        assert renames["pyjwt"] == "jwt"
+        assert renames["opencv-python"] == "cv2"
+
+    def test_renames_are_case_insensitive(self):
+        """Lookup should work regardless of case."""
+        renames = SandboxedInstall._PIP_IMPORT_RENAMES
+        # The lookup uses .lower() so Pillow → pillow → PIL
+        assert "pillow" in renames
+        assert "Pillow".lower() in renames
+
+    @patch("fenceline.install.sandbox._docker", return_value="docker")
+    @patch("fenceline.install.sandbox.subprocess.run")
+    def test_resolve_falls_back_to_underscore(self, mock_run, _mock_docker):
+        """Unknown packages should fall back to hyphen→underscore."""
+        import ipaddress
+        from fenceline.deepmap.models import AllowedDomain, CDNMap, DeepMap, ToolMap
+        cdn = CDNMap(
+            id="fastly", name="Fastly", asn="AS54113",
+            ipv4_prefixes=[ipaddress.IPv4Network("151.101.0.0/16")],
+            ipv6_prefixes=[],
+        )
+        tool = ToolMap(
+            id="pip", description="pip",
+            primary_domains=[AllowedDomain(domain="pypi.org", cdn_provider="fastly")],
+        )
+        deep_map = DeepMap(tools=[tool], cdns=[cdn])
+
+        sandbox = SandboxedInstall(deep_map)
+        sandbox._container_id = "fake123"
+
+        # Mock docker exec to return empty (no top_level.txt found)
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+
+        result = sandbox._resolve_pip_import_name("my-cool-package")
+        assert result == "my_cool_package"

@@ -71,7 +71,7 @@ The documentation IS the product. The Docker sandbox is the core defense tool; d
 
 - Keep it simple — readable code over clever code
 - No unnecessary dependencies
-- Test against the attack simulations in `testing/`
+- Test against the attack simulations in `tests/`
 - Document what it does and what it catches
 
 ## Code of Conduct

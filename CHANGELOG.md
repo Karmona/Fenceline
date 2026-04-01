@@ -15,20 +15,24 @@ All notable changes to this project will be documented in this file.
 - **Capability diffing** — detects when postinstall/preinstall scripts are added between package versions. Common attack pattern.
 - **Output formatters** — colored console output (ANSI, respects NO_COLOR) and GitHub markdown tables with emoji status indicators.
 - **`--fail-on` flag for `fenceline check`** — configurable CI threshold (low/medium/high/critical). Default: high. Also implemented in GitHub Action.
-- **PyPI provenance checking** — queries PyPI JSON API for Sigstore attestations and PGP signatures.
-- **PyPI capability analysis** — detects sdist-only packages (setup.py execution risk) and native extension classifiers.
-- **Pip console script promotion** — newly installed console scripts (e.g., `black`, `flask`) are copied from container bin/ to host.
+- **PyPI provenance checking** — queries PyPI JSON API for PEP 740 Sigstore attestations. (Note: PyPI's `has_sig` field is deprecated and always false — we rely on PEP 740 only.)
+- **PyPI capability analysis** — detects sdist-only packages (setup.py execution risk, +15 pts) and native extension classifiers (+10 pts). Signals scored in risk model.
+- **Pip console script promotion** — newly installed console scripts (e.g., `black`, `flask`) are copied from container bin/ to host. Errors logged, not silently swallowed.
+- **Pip import name resolution** — Stage 2 import test resolves distribution→import names via `top_level.txt`, well-known renames table (Pillow→PIL, PyYAML→yaml, etc.), and hyphen→underscore fallback.
 - **pip/pip3 wrapping** — `fenceline wrap --enable` now wraps pip alongside npm/yarn/pnpm.
 - **`fenceline map --check/--update`** — validate and refresh deep map data against live DNS.
+- **`.pth` file detection** — filesystem diffing flags unknown `.pth` files as CRITICAL. These execute code on every Python startup (used in TeamPCP/LiteLLM attack).
+- **`--dry-run` flag for `fenceline install`** — runs all 10 detection layers but skips artifact copy to host. Used for safe validation and testing.
 - Filesystem diffing in sandbox — detects dropped binaries, executables in unexpected locations, files in sensitive directories.
 - Python artifact promotion — pip installs copy newly installed packages from sandbox to host.
 - `--format json` flag for `fenceline install` — structured JSON output for CI integration.
 - Structured logging via `fenceline.log` module — all progress messages go to stderr, user-facing output to stdout.
-- Docker integration tests (real end-to-end with containers).
+- Docker integration tests (real end-to-end with containers, 4 tests).
+- `__main__.py` — enables `python -m fenceline` usage.
 - CLAUDE.md with instructions for AI coding tools.
 - Example project in `examples/safe-project/` for local testing.
-- Package validation script (`tools/validate-packages.sh`) — tests 10 npm + 10 pip packages through sandbox.
-- 341 tests across 19 test files (up from 83 in v0.5.0).
+- Package validation script (`tools/validate-packages.sh`) — tests 10 npm + 10 pip packages through sandbox with `--dry-run`.
+- 352 tests across 21 test files (up from 83 in v0.5.0).
 
 ### Changed
 - README restructured for adoption: Quick Start first, wrapper-led, Problem section shortened.
@@ -40,6 +44,9 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **Container lifecycle fix** — post-install checks (Stage 2, filesystem diff, DNS, HTTP, pip artifacts) now run while the container is still alive. Previously `docker wait` blocked until the container stopped, causing all `docker exec`-based checks to fail silently.
 - **Install speed** — installs complete in ~10s instead of ~65s (no longer waits for unnecessary 60s sleep period).
+- **GitHub Action non-PR fallback** — `action.yml` now falls back to `github.event.before` (push) and `HEAD~1` (workflow_dispatch) when `pull_request.base.sha` is empty.
+- **Pip Stage 2 import names** — distribution names with hyphens (google-auth, python-dateutil) now correctly resolve to import names (google.auth, dateutil) via metadata lookup and known renames table.
+- **Pip console script copy error handling** — failures are now logged individually instead of silently swallowed; return value checked by caller.
 - `docker cp` now checks returncode — failed copy no longer silently reports success.
 - `fenceline install` (no args) now shows install-specific help, not top-level help.
 - Package name validation before Stage 2 import (prevents injection inside container).

@@ -71,8 +71,8 @@ Levels: LOW (0-15), MEDIUM (16-35), HIGH (36-60), CRITICAL (61+)
 
 ```bash
 pip install -e ".[dev]"
-python3 -m pytest tests/ -v -m "not integration"   # 341 unit tests, ~17s
-python3 -m pytest tests/integration/ -v             # Docker integration tests
+python3 -m pytest tests/ -v -m "not integration"   # 348 unit tests
+python3 -m pytest tests/integration/ -v             # 4 Docker integration tests (352 total)
 cd examples/safe-project && ./test.sh               # local end-to-end
 fenceline --version                                  # should show 0.6.0
 ```
@@ -125,8 +125,8 @@ src/fenceline/
 └── init/hooks.py             # Git hook installer
 
 map/                          # Network baselines (8 tools, 4 CDNs)
-tests/                        # 341 unit tests (19 files)
-tests/integration/            # Docker integration tests (4 tests)
+tests/                        # 348 unit tests (20 files)
+tests/integration/            # 4 Docker integration tests (352 total, 21 files)
 examples/safe-project/        # Local verification project
 exploits/                     # 11 attack case studies (2018-2026)
 docs/                         # Landscape, playbook, newsroom, guide
@@ -138,6 +138,7 @@ docs/                         # Landscape, playbook, newsroom, guide
 fenceline wrap --enable              # activate firewall for npm/yarn/pnpm/pip
 fenceline wrap --status              # see what's wrapped
 fenceline install --sandbox <cmd>    # one-off sandboxed install
+fenceline install --sandbox --dry-run <cmd>  # run detection only, skip artifact copy
 fenceline install --sandbox --format json <cmd>  # JSON output for CI
 fenceline check                      # scan lockfile (cached registry lookups)
 fenceline check --format json        # JSON output

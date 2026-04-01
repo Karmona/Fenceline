@@ -81,7 +81,7 @@ fenceline install --sandbox npm install <pkg>
 | **Port enforcement** | Connections to non-443 ports | Any port != 443 -> CRITICAL |
 | **CDN fingerprinting** | Connections to unexpected CDNs | IP checked against deep map CIDR ranges |
 | **Process heuristic** | curl/wget/bash spawned by install scripts | Expected processes per tool (node/npm for npm installs) |
-| **Filesystem diffing** | Dropped binaries, files in /etc, /root, /home | Pre/post snapshot comparison |
+| **Filesystem diffing** | Dropped binaries, `.pth` files, files in /etc, /root, /home | Pre/post snapshot comparison |
 | **Import monitoring** | Lazy payloads that activate on require()/import | Stage 2 runs require() inside container |
 | **DNS monitoring** | DNS tunneling, unusual resolver activity | iptables LOG on UDP port 53 |
 | **HTTP behavior** | POST/PUT to unexpected domains | Logging proxy captures CONNECT targets and HTTP methods (Node.js + Python) |
@@ -148,6 +148,7 @@ Theoretical assessments -- not proven in-the-wild. See [exploits/](exploits/) fo
 |---------|-------------|
 | `fenceline wrap --enable` | Activate the dependency firewall for npm/yarn/pnpm/pip |
 | `fenceline install --sandbox <cmd>` | One-off sandboxed install with full monitoring |
+| `fenceline install --sandbox --dry-run <cmd>` | Run all detection layers but skip artifact copy to host |
 | `fenceline install --sandbox --format json <cmd>` | JSON output for CI integration |
 | `fenceline check` | Scan lockfile diffs for risky changes (cached registry lookups) |
 | `fenceline check --fail-on medium` | Fail CI if any package is MEDIUM risk or higher |
@@ -180,8 +181,8 @@ cd examples/safe-project
 |-------|--------|------|
 | Core Engine | Done | Docker sandbox, 2-stage monitoring, filesystem diffing, iptables LOG capture |
 | Detection | Done | CDN fingerprinting, expected-process heuristic, DNS monitoring, HTTP proxy analysis |
-| CLI Tools | Done | wrap (npm + pip), install (--format json), check (cached), map, audit-actions, init. 341 tests. |
-| Ecosystem | Done | Node.js production-ready, Python pip supported, others experimental |
+| CLI Tools | Done | wrap (npm + pip), install (--format json, --dry-run), check (cached, --fail-on), map, audit-actions, init. 352 tests. |
+| Ecosystem | Done | Node.js production-ready, Python pip fully supported (import resolution, console scripts), others experimental |
 | Knowledge Base | Done | 11 exploit case studies, defense playbook, tool landscape |
 | Next | Planned | CI enforcement mode, deeper HTTP payload analysis, eBPF tracing |
 
