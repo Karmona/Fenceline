@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Filesystem diffing in sandbox — detects dropped binaries, executables in unexpected locations, files in sensitive directories. Runs between Stage 1 (network) and Stage 2 (import).
+- Python artifact promotion — pip installs now copy newly installed packages from sandbox to host using pre/post package list diff.
+- `--format json` flag for `fenceline install` — structured JSON output for CI integration.
+- Competitive positioning section in README ("Why Fenceline?").
+
+### Changed
+- README restructured for adoption: Quick Start first, wrapper-led, Problem section shortened.
+- `wrap` command listed first in CLI help as hero workflow.
+- CLI description updated to "Dependency firewall for developer machines".
+- GitHub Action renamed from "Supply Chain Check" to "Dependency Check".
+- Package metadata aligned to Node-first positioning.
+
+### Fixed
+- `docker cp` now checks returncode — failed copy no longer silently reports success.
+- `fenceline install` (no args) now shows install-specific help, not top-level help.
+- Package name validation before Stage 2 import (prevents injection inside container).
+- Filesystem diff `/tmp` logic bug (was always marking files as harmless).
+- URL-escape package names in registry lookups.
+
+### Security
+- Package names validated against safe character regex before shell interpolation in Stage 2 import tests.
+- Registry URLs now escape special characters to prevent request manipulation.
+
 ## [0.5.0] - 2026-03-31
 
 ### Added

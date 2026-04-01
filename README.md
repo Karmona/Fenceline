@@ -151,11 +151,12 @@ Fenceline is optimized for **install-time and import-time network behavior on de
 
 | Phase | Status | What |
 |-------|--------|------|
-| Core Engine | Done | Docker sandbox, 2-stage monitoring (install + import), fail-closed wrapper |
+| Core Engine | Done | Docker sandbox, 2-stage monitoring, filesystem diffing, fail-closed wrapper |
 | Detection | Done | Infrastructure fingerprinting (deep map), CDN matching, process tree tracking |
-| CLI Tools | Done | wrap, install, check, audit-actions, init. 132 tests. |
+| CLI Tools | Done | wrap, install (--format json), check, audit-actions, init. 140 tests. |
+| Ecosystem | Done | Node.js fully supported, Python pip with artifact promotion |
 | Knowledge Base | Done | 11 exploit case studies, defense playbook, tool landscape |
-| Next | Planned | Filesystem diffing, HTTP behavioral analysis, Python artifact promotion, JSON output for CI |
+| Next | Planned | HTTP behavioral analysis, pip wrapper support, CI enforcement mode |
 
 ## Contributing
 
